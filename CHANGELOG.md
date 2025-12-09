@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## Version 4.4.1 2025-12-09
+
+### Trivial changes
+
+- Upgraded dependencies
+
 ## Version 4.4.0 2025-06-30
 
 ## Features
