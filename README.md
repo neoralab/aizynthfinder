@@ -18,7 +18,7 @@ Before you begin, ensure you have met the following requirements:
 
 * Linux, Windows or macOS platforms are supported - as long as the dependencies are supported on these platforms.
 
-* You have installed [anaconda](https://www.anaconda.com/) or [miniconda](https://docs.conda.io/en/latest/miniconda.html) with python 3.9 - 3.11
+* You have installed [anaconda](https://www.anaconda.com/) or [miniconda](https://docs.conda.io/en/latest/miniconda.html) with python 3.10 - 3.12
 
 The tool has been developed on a Linux platform, but the software has been tested on Windows 10 and macOS Catalina.
 
@@ -28,7 +28,7 @@ The tool has been developed on a Linux platform, but the software has been teste
 
 First time, execute the following command in a console or an Anaconda prompt
 
-    conda create "python>=3.9,<3.11" -n aizynth-env
+    conda create "python>=3.10,<3.13" -n aizynth-env
 
 To install, activate the environment and install the package using pypi
 
