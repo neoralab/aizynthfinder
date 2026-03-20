@@ -16,40 +16,48 @@ An introduction video can be found here: [https://youtu.be/r9Dsxm-mcgA](https://
 
 Before you begin, ensure you have met the following requirements:
 
-* Linux, Windows or macOS platforms are supported - as long as the dependencies are supported on these platforms.
+* Linux, Windows or macOS platforms are supported, as long as the Python dependencies are available for the platform.
+* Python 3.10 - 3.12.
+* For the default CPU-only workflow, install dependencies from PyPI using `uv` or `pip`.
 
-* You have installed [anaconda](https://www.anaconda.com/) or [miniconda](https://docs.conda.io/en/latest/miniconda.html) with python 3.10 - 3.12
-
-The tool has been developed on a Linux platform, but the software has been tested on Windows 10 and macOS Catalina.
+The tool has been developed on Linux, but the software has also been tested on Windows and macOS.
 
 ## Installation
 
 ### For end-users
 
-First time, execute the following command in a console or an Anaconda prompt
+Install the default CPU-oriented package from PyPI:
 
-    conda create "python>=3.10,<3.13" -n aizynth-env
+```bash
+uv pip install aizynthfinder
+```
 
-To install, activate the environment and install the package using pypi
+If you need the optional notebook GUI, TensorFlow serving support, MongoDB support, or molbloom-based stock tooling, install extras as needed:
 
-    conda activate aizynth-env
-    python -m pip install aizynthfinder[all]
-
-for a smaller package, without all the functionality, you can also type
-
-    python -m pip install aizynthfinder
+```bash
+uv pip install "aizynthfinder[notebooks]"
+uv pip install "aizynthfinder[tf]"
+uv pip install "aizynthfinder[mongo,bloom]"
+```
 
 ### For developers
 
-First clone the repository using Git.
+Clone the repository and create a local environment with `uv`:
 
-Then execute the following commands in the root of the repository
+```bash
+uv sync --group dev
+```
 
-    conda env create -f env-dev.yml
-    conda activate aizynth-dev
-    poetry install --all-extras
+For an editable install instead of a synced environment:
 
-the `aizynthfinder` package is now installed in editable mode.
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+uv pip install -e ".[dev]"
+```
+
+Conda environments are still possible, but they are now optional rather than the primary installation path.
 
 
 ## Usage
@@ -82,7 +90,7 @@ This will create a ``config.yml`` file that you can use with either ``aizynthcli
 
 ### Testing
 
-Tests uses the ``pytest`` package, and is installed by `poetry`
+Tests use the ``pytest`` package and can be installed with `uv sync --group test` or `uv sync --group dev`.
 
 Run the tests using:
 

@@ -2,5 +2,5 @@
 """
 try:
     from aizynthfinder.interfaces.aizynthapp import AiZynthApp  # noqa
-except ModuleNotFoundError:
+except ImportError:
     pass
