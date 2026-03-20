@@ -6,32 +6,83 @@ import os
 import signal
 import subprocess
 import tempfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import ipywidgets as widgets
-import jupytext
-from IPython.display import HTML, display
-from ipywidgets import (
-    BoundedIntText,
-    Button,
-    Checkbox,
-    Dropdown,
-    HBox,
-    IntText,
-    Label,
-    Output,
-    SelectMultiple,
-    Text,
-    VBox,
-)
 from rdkit import Chem
 
 from aizynthfinder.aizynthfinder import AiZynthFinder
-from aizynthfinder.interfaces.gui.utils import pareto_fronts_plot, route_display
 from aizynthfinder.utils.logging import setup_logger
 
 if TYPE_CHECKING:
+    import ipywidgets as widgets
+    from IPython.display import HTML
+    from ipywidgets import BoundedIntText, Button, Checkbox, Dropdown, HBox, IntText, Label, Output, SelectMultiple, Text, VBox
+
     from aizynthfinder.utils.type_utils import StrDict
+
+
+def _load_notebook_dependencies() -> dict[str, Any]:
+    try:
+        import ipywidgets as widgets
+        import jupytext
+        from IPython.display import HTML, display
+        from ipywidgets import (
+            BoundedIntText,
+            Button,
+            Checkbox,
+            Dropdown,
+            HBox,
+            IntText,
+            Label,
+            Output,
+            SelectMultiple,
+            Text,
+            VBox,
+        )
+    except ImportError as err:
+        raise ImportError(
+            "Notebook support is not installed. Install with `uv pip install -e .[notebooks]` "
+            "or `uv sync --extra notebooks`."
+        ) from err
+
+    return {
+        "widgets": widgets,
+        "jupytext": jupytext,
+        "HTML": HTML,
+        "display": display,
+        "BoundedIntText": BoundedIntText,
+        "Button": Button,
+        "Checkbox": Checkbox,
+        "Dropdown": Dropdown,
+        "HBox": HBox,
+        "IntText": IntText,
+        "Label": Label,
+        "Output": Output,
+        "SelectMultiple": SelectMultiple,
+        "Text": Text,
+        "VBox": VBox,
+    }
+
+
+def _ensure_notebook_dependencies() -> dict[str, Any]:
+    deps = _load_notebook_dependencies()
+    globals().update({
+        "widgets": deps["widgets"],
+        "display": deps["display"],
+        "HTML": deps["HTML"],
+        "BoundedIntText": deps["BoundedIntText"],
+        "Button": deps["Button"],
+        "Checkbox": deps["Checkbox"],
+        "Dropdown": deps["Dropdown"],
+        "HBox": deps["HBox"],
+        "IntText": deps["IntText"],
+        "Label": deps["Label"],
+        "Output": deps["Output"],
+        "SelectMultiple": deps["SelectMultiple"],
+        "Text": deps["Text"],
+        "VBox": deps["VBox"],
+    })
+    return deps
 
 
 class AiZynthApp:
@@ -54,6 +105,7 @@ class AiZynthApp:
     """
 
     def __init__(self, configfile: str, setup: bool = True) -> None:
+        _ensure_notebook_dependencies()
         setup_logger(logging.INFO)
         self.finder = AiZynthFinder(configfile=configfile)
         self._input: StrDict = dict()
@@ -238,7 +290,7 @@ class AiZynthApp:
         )
         display(self._output["tree_search"])
 
-    def _make_slider_input(self, label, description, min_val, max_val) -> HBox:
+    def _make_slider_input(self, label, description, min_val, max_val) -> "HBox":
         label_widget = Label(description)
         slider = widgets.IntSlider(
             continuous_update=True, min=min_val, max=max_val, readout=False
@@ -283,6 +335,8 @@ class AiZynthApp:
         self._output["pareto_fronts"].clear_output()
         if len(rewards) > 1:
             with self._output["pareto_fronts"]:
+                from aizynthfinder.interfaces.gui.utils import pareto_fronts_plot
+
                 pareto_fronts_plot(self.finder.routes)
 
         self._show_route(0)
@@ -341,6 +395,8 @@ class AiZynthApp:
             display(mol)
 
     def _show_route(self, index) -> None:
+        from aizynthfinder.interfaces.gui.utils import route_display
+
         route_display(index, self.finder.routes, self._output["routes"])
 
     def _toggle_button(self, on_) -> None:
@@ -373,12 +429,13 @@ def main() -> None:
             "app = AiZynthApp(configfile)",
         ]
     )
-    notebook = jupytext.reads(commands, fmt="py:percent")
+    nb_deps = _ensure_notebook_dependencies()
+    notebook = nb_deps["jupytext"].reads(commands, fmt="py:percent")
     if args.output:
         filename = args.output
     else:
         _, filename = tempfile.mkstemp(suffix=".ipynb")
-    jupytext.write(notebook, filename, fmt="ipynb")
+    nb_deps["jupytext"].write(notebook, filename, fmt="ipynb")
 
     if args.output:
         print(f"Notebook saved to {filename}. It can now be open with Jupyter notebook")
