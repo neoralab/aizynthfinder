@@ -1,6 +1,8 @@
-"""Module containing routines to work with files and processes."""
+"""Utilities for working with output files and subprocess orchestration."""
+
 from __future__ import annotations
 
+import asyncio
 import gzip
 import json
 import subprocess
@@ -13,6 +15,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from deprecated import deprecated
 
+from aizynthfinder.domain import SmilesBatch
 from aizynthfinder.utils.logging import logger
 
 if TYPE_CHECKING:
@@ -27,11 +30,13 @@ if TYPE_CHECKING:
 
 
 def read_datafile(filename: Union[str, Path]) -> pd.DataFrame:
-    """
-    Read aizynth output from disc in either .hdf5 or .json format
+    """Read AiZynthFinder output data from disk.
 
-    :param filename: the path to the data
-    :return: the loaded data
+    Args:
+        filename: Path to a JSON or HDF5 data file.
+
+    Returns:
+        The loaded tabular data.
     """
     filename_str = str(filename)
     if filename_str.endswith(".hdf5") or filename_str.endswith(".hdf"):
@@ -39,42 +44,58 @@ def read_datafile(filename: Union[str, Path]) -> pd.DataFrame:
     return pd.read_json(filename, orient="table")
 
 
-def save_datafile(data: pd.DataFrame, filename: Union[str, Path]) -> None:
-    """
-    Save the given data to disc in either .hdf5 or .json format
+async def read_datafile_async(filename: Union[str, Path]) -> pd.DataFrame:
+    """Asynchronously read an output data file.
 
-    :param data: the data to save
-    :param filename: the path to the data
+    Args:
+        filename: Path to a JSON or HDF5 data file.
+
+    Returns:
+        The loaded tabular data.
+    """
+    return await asyncio.to_thread(read_datafile, filename)
+
+
+def save_datafile(data: pd.DataFrame, filename: Union[str, Path]) -> None:
+    """Persist output data to disk.
+
+    Args:
+        data: The data to serialize.
+        filename: Path to a JSON or HDF5 output file.
     """
     filename_str = str(filename)
     if filename_str.endswith(".hdf5") or filename_str.endswith(".hdf"):
-        with warnings.catch_warnings():  # This wil suppress a PerformanceWarning
+        with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data.to_hdf(filename, key="table")
     else:
         data.to_json(filename, orient="table")
 
 
+async def save_datafile_async(data: pd.DataFrame, filename: Union[str, Path]) -> None:
+    """Asynchronously persist output data to disk.
+
+    Args:
+        data: The data to serialize.
+        filename: Path to a JSON or HDF5 output file.
+    """
+    await asyncio.to_thread(save_datafile, data, filename)
+
+
 @deprecated(version="4.0.0", reason="replaced by 'cat_datafiles'")
-def cat_hdf_files(
-    input_files: List[str], output_name: str, trees_name: Optional[str] = None
-) -> None:
-    """Concatenate hdf5 or json datafiles"""
+def cat_hdf_files(input_files: List[str], output_name: str, trees_name: Optional[str] = None) -> None:
+    """Concatenate HDF5 or JSON data files."""
     cat_datafiles(input_files, output_name, trees_name)
 
 
-def cat_datafiles(
-    input_files: List[str], output_name: str, trees_name: Optional[str] = None
-) -> None:
-    """
-    Concatenate hdf5 or json datafiles
+def cat_datafiles(input_files: List[str], output_name: str, trees_name: Optional[str] = None) -> None:
+    """Concatenate multiple output files into a single artifact.
 
-    if `tree_name` is given, will take out the `trees` column
-    from the tables and save it to a gzipped-json file.
-
-    :param input_files: the paths to the files to concatenate
-    :param output_name: the name of the concatenated file
-    :param trees_name: the name of the concatenated trees
+    Args:
+        input_files: Paths to the files to concatenate.
+        output_name: Path to the merged tabular output file.
+        trees_name: Optional path for a gzipped JSON file containing serialized
+            tree payloads extracted from the ``trees`` column.
     """
     data = read_datafile(input_files[0])
     if "trees" not in data.columns:
@@ -102,14 +123,16 @@ def cat_datafiles(
 
 
 def split_file(filename: str, nparts: int) -> List[str]:
-    """
-    Split the content of a text file into a given number of temporary files
+    """Split a text file into temporary batches.
 
-    :param filename: the path to the file to split
-    :param nparts: the number of parts to create
-    :return: list of filenames of the parts
+    Args:
+        filename: Path to the input text file.
+        nparts: Number of parts to create.
+
+    Returns:
+        A list of temporary filenames.
     """
-    with open(filename, "r") as fileobj:
+    with open(filename, "r", encoding="utf-8") as fileobj:
         lines = fileobj.read().splitlines()
 
     filenames = []
@@ -119,37 +142,52 @@ def split_file(filename: str, nparts: int) -> List[str]:
         start = stop
         stop += batch_size + 1 if part <= remainder else batch_size
         filenames.append(tempfile.mktemp())
-        with open(filenames[-1], "w") as fileobj:
+        with open(filenames[-1], "w", encoding="utf-8") as fileobj:
             fileobj.write("\n".join(lines[start:stop]))
     return filenames
 
 
-def start_processes(
-    inputs: Sequence[Any], log_prefix: str, cmd_callback: Callable, poll_freq: int = 5
-) -> None:
+def load_smiles_batch(filename: str) -> SmilesBatch:
+    """Load a SMILES batch from a text file.
+
+    Args:
+        filename: Path to the SMILES input file.
+
+    Returns:
+        A lightweight immutable batch model.
     """
-    Start a number of background processes and wait for them
-    to complete.
+    path = Path(filename)
+    smiles = tuple(line.strip() for line in path.read_text(encoding="utf-8").splitlines())
+    return SmilesBatch(source=path, smiles=smiles)
 
-    The standard output and standard error is saved to a log file.
 
-    The command to start for each process is given by the ``cmd_callback``
-    function that takes the index of the process and an item of the input
-    as arguments.
+async def load_smiles_batch_async(filename: str) -> SmilesBatch:
+    """Asynchronously load a SMILES batch from disk.
 
-    :param inputs: a sequence of input to the processes
-    :param log_prefix: the prefix to the log file of each processes
-    :param cmd_callback: function that creates the process commands
-    :param poll_freq: the polling frequency for checking if processes are completed
+    Args:
+        filename: Path to the SMILES input file.
+
+    Returns:
+        A lightweight immutable batch model.
+    """
+    return await asyncio.to_thread(load_smiles_batch, filename)
+
+
+def start_processes(inputs: Sequence[Any], log_prefix: str, cmd_callback: Callable, poll_freq: int = 5) -> None:
+    """Start background subprocesses and wait for completion.
+
+    Args:
+        inputs: Input values used to build subprocess commands.
+        log_prefix: Prefix for process log files.
+        cmd_callback: Callback that creates each subprocess command.
+        poll_freq: Polling interval, in seconds.
     """
     processes = []
     output_fileobjs = []
     for index, iinput in enumerate(inputs, 1):
-        output_fileobjs.append(open(f"{log_prefix}{index}.log", "w"))
+        output_fileobjs.append(open(f"{log_prefix}{index}.log", "w", encoding="utf-8"))
         cmd = cmd_callback(index, iinput)
-        processes.append(
-            subprocess.Popen(cmd, stdout=output_fileobjs[-1], stderr=subprocess.STDOUT)
-        )
+        processes.append(subprocess.Popen(cmd, stdout=output_fileobjs[-1], stderr=subprocess.STDOUT))
         logger().info(f"Started background task with pid={processes[-1].pid}")
 
     logger().info("Waiting for background tasks to complete...")

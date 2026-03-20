@@ -1,7 +1,8 @@
-""" Module containing a class that is the main interface the retrosynthesis tool.
-"""
+"""Primary public APIs for retrosynthesis planning and policy expansion."""
+
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import defaultdict
 from typing import TYPE_CHECKING
@@ -40,31 +41,20 @@ if TYPE_CHECKING:
 
 
 class AiZynthFinder:
-    """
-    Public API to the aizynthfinder tool
+    """Public API for the AiZynthFinder retrosynthesis workflow.
 
-    If instantiated with the path to a yaml file or dictionary of settings
-    the stocks and policy networks are loaded directly.
-    Otherwise, the user is responsible for loading them prior to
-    executing the tree search.
+    The core chemistry and search logic remain synchronous. Configuration
+    loading and application/service orchestration can use async facades where
+    that helps integrate with larger systems, but the planning engine itself is
+    intentionally left synchronous and CPU-oriented.
 
-    :ivar config: the configuration of the search
-    :ivar expansion_policy: the expansion policy model
-    :ivar filter_policy: the filter policy model
-    :ivar stock: the stock
-    :ivar scorers: the loaded scores
-    :ivar tree: the search tree
-    :ivar analysis: the tree analysis
-    :ivar routes: the top-ranked routes
-    :ivar search_stats: statistics of the latest search
-
-    :param configfile: the path to yaml file with configuration (has priority over configdict), defaults to None
-    :param configdict: the config as a dictionary source, defaults to None
+    Args:
+        configfile: Optional path to a YAML configuration file.
+        configdict: Optional configuration dictionary used when ``configfile`` is
+            not provided.
     """
 
-    def __init__(
-        self, configfile: Optional[str] = None, configdict: Optional[StrDict] = None
-    ) -> None:
+    def __init__(self, configfile: Optional[str] = None, configdict: Optional[StrDict] = None) -> None:
         self._logger = logger()
 
         if configfile:
@@ -83,9 +73,7 @@ class AiZynthFinder:
         self.search_stats: StrDict = dict()
         self.routes = RouteCollection([])
         self.analysis: Optional[TreeAnalysis] = None
-        self._num_objectives = len(
-            self.config.search.algorithm_config.get("search_rewards", [])
-        )
+        self._num_objectives = len(self.config.search.algorithm_config.get("search_rewards", []))
 
     @property
     def target_smiles(self) -> str:
@@ -113,15 +101,14 @@ class AiZynthFinder:
         selection: Optional[RouteSelectionArguments] = None,
         scorer: Optional[Union[str, List[str]]] = None,
     ) -> None:
-        """
-        Build reaction routes
+        """Build ranked reaction routes from the current search tree.
 
-        This is necessary to call after the tree search has completed in order
-        to extract results from the tree search.
+        Args:
+            selection: Optional selection criteria for extracted routes.
+            scorer: Optional scorer name or list of scorer names.
 
-        :param selection: the selection criteria for the routes
-        :param scorer: a reference to the object used to score the nodes, can be a list
-        :raises ValueError: if the search tree not initialized
+        Raises:
+            ValueError: If the search tree has not been initialized.
         """
         self.analysis = self._setup_analysis(scorer=scorer)
         config_selection = RouteSelectionArguments(
@@ -129,30 +116,26 @@ class AiZynthFinder:
             nmax=self.config.post_processing.max_routes,
             return_all=self.config.post_processing.all_routes,
         )
-        self.routes = RouteCollection.from_analysis(
-            self.analysis, selection or config_selection
-        )
+        self.routes = RouteCollection.from_analysis(self.analysis, selection or config_selection)
 
     def extract_statistics(self) -> StrDict:
-        """Extracts tree statistics as a dictionary"""
+        """Extract tree statistics for the most recent analysis run."""
         if not self.analysis:
             return {}
         stats = {
             "target": self.target_smiles,
             "search_time": self.search_stats["time"],
             "first_solution_time": self.search_stats.get("first_solution_time", 0),
-            "first_solution_iteration": self.search_stats.get(
-                "first_solution_iteration", 0
-            ),
+            "first_solution_iteration": self.search_stats.get("first_solution_iteration", 0),
         }
         stats.update(self.analysis.tree_statistics())
         return stats
 
     def prepare_tree(self) -> None:
-        """
-        Setup the tree for searching
+        """Prepare the search tree and related runtime state.
 
-        :raises ValueError: if the target molecule was not set
+        Raises:
+            ValueError: If the target molecule is missing or invalid.
         """
         if not self.target_mol:
             raise ValueError("No target molecule set")
@@ -163,10 +146,7 @@ class AiZynthFinder:
             raise ValueError("Target molecule unsanitizable")
 
         self.stock.reset_exclusion_list()
-        if (
-            self.config.search.exclude_target_from_stock
-            and self.target_mol in self.stock
-        ):
+        if self.config.search.exclude_target_from_stock and self.target_mol in self.stock:
             self.stock.exclude(self.target_mol)
             self._logger.debug("Excluding the target compound from the stock")
 
@@ -180,14 +160,7 @@ class AiZynthFinder:
         self.expansion_policy.reset_cache()
 
     def stock_info(self) -> StrDict:
-        """
-        Return the stock availability for all leaf nodes in all collected reaction trees
-
-        The key of the return dictionary will be the SMILES string of the leaves,
-        and the value will be the stock availability
-
-        :return: the collected stock information.
-        """
+        """Return stock availability information for collected route leaves."""
         if not self.analysis:
             return {}
         _stock_info = {}
@@ -198,11 +171,13 @@ class AiZynthFinder:
         return _stock_info
 
     def tree_search(self, show_progress: bool = False) -> float:
-        """
-        Perform the actual tree search
+        """Perform the actual tree search.
 
-        :param show_progress: if True, shows a progress bar
-        :return: the time past in seconds
+        Args:
+            show_progress: If ``True``, show a progress bar.
+
+        Returns:
+            The elapsed search time in seconds.
         """
         if not self.tree:
             self.prepare_tree()
@@ -218,10 +193,7 @@ class AiZynthFinder:
         if show_progress:
             pbar = tqdm(total=self.config.search.iteration_limit, leave=False)
 
-        while (
-            time_past < self.config.search.time_limit
-            and i <= self.config.search.iteration_limit
-        ):
+        while time_past < self.config.search.time_limit and i <= self.config.search.iteration_limit:
             if show_progress:
                 pbar.update(1)
             self.search_stats["iterations"] += 1
@@ -249,6 +221,22 @@ class AiZynthFinder:
         self.search_stats["time"] = time_past
         return time_past
 
+    async def tree_search_async(self, show_progress: bool = False) -> float:
+        """Asynchronously execute :meth:`tree_search`.
+
+        Args:
+            show_progress: If ``True``, show a progress bar.
+
+        Returns:
+            The elapsed search time in seconds.
+
+        Notes:
+            This wrapper offloads the synchronous search to a worker thread so it
+            can be composed with other asynchronous I/O tasks. It does not make
+            the CPU-bound planning algorithm intrinsically faster.
+        """
+        return await asyncio.to_thread(self.tree_search, show_progress)
+
     def _setup_focussed_bonds(self, target_mol: Molecule) -> None:
         """
         Setup multi-objective scoring function with 'broken bonds'-scorer and
@@ -265,10 +253,7 @@ class AiZynthFinder:
             bond_filter = BondFilter(bond_filter_key, self.config)
             self.filter_policy.load(bond_filter)
             self.filter_policy.select(bond_filter_key, append=True)
-        elif (
-            self.filter_policy.selection
-            and bond_filter_key in self.filter_policy.selection
-        ):
+        elif self.filter_policy.selection and bond_filter_key in self.filter_policy.selection:
             self.filter_policy.deselect(bond_filter_key)
 
         search_rewards = self.config.search.algorithm_config.get("search_rewards")
@@ -284,9 +269,7 @@ class AiZynthFinder:
     def _setup_search_tree(self) -> None:
         self._logger.debug(f"Defining tree root:  {self.target_smiles}")
         if self.config.search.algorithm.lower() == "mcts":
-            self.tree = MctsSearchTree(
-                root_smiles=self.target_smiles, config=self.config
-            )
+            self.tree = MctsSearchTree(root_smiles=self.target_smiles, config=self.config)
         else:
             cls = load_dynamic_class(self.config.search.algorithm)
             self.tree = cls(root_smiles=self.target_smiles, config=self.config)
@@ -308,9 +291,7 @@ class AiZynthFinder:
             scorer_names = self.config.post_processing.route_scorers
             # If not defined, use the same scorer as the search rewards
             if not scorer_names:
-                search_rewards = self.config.search.algorithm_config.get(
-                    "search_rewards"
-                )
+                search_rewards = self.config.search.algorithm_config.get("search_rewards")
                 scorer_names = search_rewards if search_rewards else ["state score"]
 
         elif isinstance(scorer, str):
@@ -353,9 +334,7 @@ class AiZynthExpander:
     :param configdict: the config as a dictionary source, defaults to None
     """
 
-    def __init__(
-        self, configfile: Optional[str] = None, configdict: Optional[StrDict] = None
-    ) -> None:
+    def __init__(self, configfile: Optional[str] = None, configdict: Optional[StrDict] = None) -> None:
         self._logger = logger()
 
         if configfile:

@@ -3,52 +3,90 @@
 [![License](https://img.shields.io/github/license/MolecularAI/aizynthfinder)](https://github.com/MolecularAI/aizynthfinder/blob/master/LICENSE)
 [![Tests](https://github.com/MolecularAI/aizynthfinder/workflows/tests/badge.svg)](https://github.com/MolecularAI/aizynthfinder/actions?workflow=tests)
 [![codecov](https://codecov.io/gh/MolecularAI/aizynthfinder/branch/master/graph/badge.svg)](https://codecov.io/gh/MolecularAI/aizynthfinder)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
-[![version](https://img.shields.io/github/v/release/MolecularAI/aizynthfinder)](https://github.com/MolecularAI/aizynthfinder/releases)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/MolecularAI/aizynthfinder/blob/master/contrib/notebook.ipynb)
 
-AiZynthFinder is a tool for retrosynthetic planning. The default algorithm is based on a Monte Carlo tree search that recursively breaks down a molecule to purchasable precursors. The tree search is guided by a policy that suggests possible precursors by utilizing a neural network trained on a library of known reaction templates. This setup is completely customizable as the tool
-supports multiple search algorithms and expansion policies.
+AiZynthFinder is a CPU-friendly retrosynthesis planning toolkit for Linux-first scientific workflows. It combines neural-network-guided policy models with route-search algorithms such as Monte Carlo tree search to propose synthetic routes from a target molecule to purchasable precursors.
 
-An introduction video can be found here: [https://youtu.be/r9Dsxm-mcgA](https://youtu.be/r9Dsxm-mcgA)
+## What it provides
 
-## Prerequisites
+- Route planning from SMILES with configurable search strategies.
+- CLI and Python APIs for batch jobs, notebooks, and service integration.
+- Pluggable stocks, scorers, policies, and search implementations.
+- Production-friendly packaging with a `uv` workflow and optional extras.
+- Docker/Linux suitability without requiring GPU dependencies.
 
-Before you begin, ensure you have met the following requirements:
+## Quickstart
 
-* Linux, Windows or macOS platforms are supported, as long as the Python dependencies are available for the platform.
-* Python 3.10 - 3.12.
-* For the default CPU-only workflow, install dependencies from PyPI using `uv` or `pip`.
-
-The tool has been developed on Linux, but the software has also been tested on Windows and macOS.
-
-## Installation
-
-### For end-users
-
-Install the default CPU-oriented package from PyPI:
+### Install with `uv`
 
 ```bash
+uv venv
+source .venv/bin/activate
 uv pip install aizynthfinder
 ```
 
-If you need the optional notebook GUI, TensorFlow serving support, MongoDB support, or molbloom-based stock tooling, install extras as needed:
+Optional extras stay behind extras so the default install remains lean:
 
 ```bash
 uv pip install "aizynthfinder[notebooks]"
 uv pip install "aizynthfinder[tf]"
 uv pip install "aizynthfinder[mongo,bloom]"
+uv pip install "aizynthfinder[all]"
 ```
 
-### For developers
+### Download public assets
 
-Clone the repository and create a local environment with `uv`:
+AiZynthFinder needs model and stock assets separately from the base package. You can download the public example assets and a starter config with:
+
+```bash
+download_public_data ./public-data
+```
+
+That command creates a usable `config.yml` alongside the downloaded assets.
+
+### Run the CLI
+
+Single target:
+
+```bash
+aizynthcli --config ./public-data/config.yml --smiles "CC(=O)Oc1ccccc1C(=O)O" --output trees.json
+```
+
+Batch file:
+
+```bash
+aizynthcli --config ./public-data/config.yml --smiles molecules.txt --output output.json.gz
+```
+
+Notebook/web UI:
+
+```bash
+aizynthapp --config ./public-data/config.yml
+```
+
+## Python API
+
+```python
+from aizynthfinder.aizynthfinder import AiZynthFinder
+
+finder = AiZynthFinder(configfile="./public-data/config.yml")
+finder.target_smiles = "CC(=O)Oc1ccccc1C(=O)O"
+finder.prepare_tree()
+finder.tree_search(show_progress=True)
+finder.build_routes()
+
+print(finder.extract_statistics())
+print(finder.routes.dict_with_extra(include_scores=True))
+```
+
+## Development workflow
+
+### Sync a development environment
 
 ```bash
 uv sync --group dev
 ```
 
-For an editable install instead of a synced environment:
+### Editable install
 
 ```bash
 uv venv
@@ -57,91 +95,58 @@ uv pip install -e .
 uv pip install -e ".[dev]"
 ```
 
-Conda environments are still possible, but they are now optional rather than the primary installation path.
+### Tests and checks
 
-
-## Usage
-
-The tool will install the `aizynthcli` and `aizynthapp` tools
-as interfaces to the algorithm:
-
-    aizynthcli --config config_local.yml --smiles smiles.txt
-    aizynthapp --config config_local.yml
-
-
-Consult the documentation [here](https://molecularai.github.io/aizynthfinder/) for more information.
-
-To use the tool you need
-
-    1. A stock file
-    2. A trained expansion policy network
-    3. A trained filter policy network (optional)
-
-Such files can be downloaded from [figshare](https://figshare.com/articles/AiZynthFinder_a_fast_robust_and_flexible_open-source_software_for_retrosynthetic_planning/12334577) and [here](https://figshare.com/articles/dataset/A_quick_policy_to_filter_reactions_based_on_feasibility_in_AI-guided_retrosynthetic_planning/13280507) or they can be downloaded automatically using
-
-```
-download_public_data my_folder
+```bash
+uv run pytest -v
+uv run pytest tests/test_cli.py -v
+uv run ruff check .
 ```
 
-where ``my_folder`` is the folder that you want download to.
-This will create a ``config.yml`` file that you can use with either ``aizynthcli`` or ``aizynthapp``.
+### Build artifacts
 
-## Development
+```bash
+uv build
+```
 
-### Testing
+## Docker basics
 
-Tests use the ``pytest`` package and can be installed with `uv sync --group test` or `uv sync --group dev`.
+A simple container workflow is:
 
-Run the tests using:
+```bash
+docker build -t aizynthfinder .
+docker run --rm -it -v "$PWD/public-data:/opt/data" aizynthfinder \
+  aizynthcli --config /opt/data/config.yml --smiles "CCO"
+```
 
-    pytest -v
+Use bind mounts for model/stock assets rather than baking large data files into the image unless you control that deployment pipeline.
 
-The full command run on the CI server is available through an `invoke` command
+## Architecture at a glance
 
-    invoke full-tests
+The package is organized around a small set of responsibilities:
 
- ### Documentation generation
+- `aizynthfinder.cli`: CLI-oriented orchestration helpers.
+- `aizynthfinder.config`: configuration entry points and compatibility exports.
+- `aizynthfinder.schemas`: Pydantic models for validated external contracts.
+- `aizynthfinder.domain`: dataclasses for internal immutable value objects.
+- `aizynthfinder.services`: configuration loading and planning orchestration.
+- `aizynthfinder.adapters`: external integration boundary modules.
+- `aizynthfinder.search`, `aizynthfinder.chem`, and related packages: core chemistry and search logic.
 
-The documentation is generated by Sphinx from hand-written tutorials and docstrings
+Pydantic is used at boundaries such as config validation and service payloads. Dataclasses remain the preferred choice for internal runtime/domain objects where coercion is unnecessary and lightweight state matters more than validation.
 
-The HTML documentation can be generated by
+## Production and deployment notes
 
-    invoke build-docs
+- Default installation is CPU-only.
+- Linux is the primary deployment target, especially for Docker and batch execution.
+- Large models, template libraries, and stock data should be managed as external assets.
+- Async wrappers are available for I/O-oriented orchestration, but the core planning algorithm remains synchronous and CPU-bound by design.
 
 ## Contributing
 
-We welcome contributions, in the form of issues or pull requests.
+1. Create an environment with `uv sync --group dev`.
+2. Make focused changes with tests.
+3. Run `uv run pytest -v` and any targeted checks.
+4. Submit a pull request with a concise description of behavior, compatibility, and asset assumptions.
 
-If you have a question or want to report a bug, please submit an issue.
-
-
-To contribute with code to the project, follow these steps:
-
-1. Fork this repository.
-2. Create a branch: `git checkout -b <branch_name>`.
-3. Make your changes and commit them: `git commit -m '<commit_message>'`
-4. Push to the remote branch: `git push`
-5. Create the pull request.
-
-Please use ``black`` package for formatting, and follow ``pep8`` style guide.
-
-
-## Contributors
-
-* [@SGenheden](https://www.github.com/SGenheden)
-* [@lakshidaa](https://github.com/Lakshidaa)
-* [@helenlai](https://github.com/helenlai)
-* [@EBjerrum](https://www.github.com/EBjerrum)
-* [@A-Thakkar](https://www.github.com/A-Thakkar)
-* [@benteb](https://www.github.com/benteb)
-
-The contributors have limited time for support questions, but please do not hesitate to submit an issue (see above).
-
-## License
-
-The software is licensed under the MIT license (see LICENSE file), and is free and provided as-is.
-
-## References
-
-1. Thakkar A, Kogej T, Reymond J-L, et al (2019) Datasets and their influence on the development of computer assisted synthesis planning tools in the pharmaceutical domain. Chem Sci. https://doi.org/10.1039/C9SC04944D
-2. Genheden S, Thakkar A, Chadimova V, et al (2020) AiZynthFinder: a fast, robust and flexible open-source software for retrosynthetic planning. ChemRxiv. Preprint. https://doi.org/10.26434/chemrxiv.12465371.v1
+For more detailed usage and background, see the hosted documentation: https://molecularai.github.io/aizynthfinder/.

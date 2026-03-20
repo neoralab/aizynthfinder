@@ -1,5 +1,4 @@
-""" Module containing classes and routines for the CLI
-"""
+"""Command-line entry points and batch orchestration for AiZynthFinder."""
 
 from __future__ import annotations
 
@@ -19,6 +18,7 @@ from aizynthfinder.aizynthfinder import AiZynthFinder
 from aizynthfinder.chem import Molecule
 from aizynthfinder.utils.files import (
     cat_datafiles,
+    load_smiles_batch,
     save_datafile,
     split_file,
     start_processes,
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
         List,
         Optional,
         StrDict,
-        Union,
     )
 
     _PostProcessingJob = Callable[[AiZynthFinder], StrDict]
@@ -54,38 +53,29 @@ def _do_clustering(
     results["distance_matrix"] = finder.routes.distance_matrix().tolist()
 
 
-def _do_post_processing(
-    finder: AiZynthFinder, results: StrDict, jobs: List[_PostProcessingJob]
-) -> None:
+def _do_post_processing(finder: AiZynthFinder, results: StrDict, jobs: List[_PostProcessingJob]) -> None:
     for job in jobs:
         results.update(job(finder))
 
 
 def _get_arguments() -> argparse.Namespace:
+    """Parse command-line arguments for ``aizynthcli``."""
     parser = argparse.ArgumentParser("aizynthcli")
     parser.add_argument(
         "--smiles",
         required=True,
         help="the target molecule smiles or the path of a file containing the smiles",
     )
-    parser.add_argument(
-        "--config", required=True, help="the filename of a configuration file"
-    )
+    parser.add_argument("--config", required=True, help="the filename of a configuration file")
     parser.add_argument(
         "--policy",
         nargs="+",
         default=[],
         help="the name of the expansion policy to use",
     )
-    parser.add_argument(
-        "--filter", nargs="+", default=[], help="the name of the filter to use"
-    )
-    parser.add_argument(
-        "--stocks", nargs="+", default=[], help="the name of the stocks to use"
-    )
-    parser.add_argument(
-        "--output", help="the name of the output file (JSON or HDF5 file)"
-    )
+    parser.add_argument("--filter", nargs="+", default=[], help="the name of the filter to use")
+    parser.add_argument("--stocks", nargs="+", default=[], help="the name of the stocks to use")
+    parser.add_argument("--output", help="the name of the output file (JSON or HDF5 file)")
     parser.add_argument(
         "--log_to_file",
         action="store_true",
@@ -108,9 +98,7 @@ def _get_arguments() -> argparse.Namespace:
         nargs="+",
         help="a number of modules that performs post-processing tasks",
     )
-    parser.add_argument(
-        "--pre_processing", help="a module that perform pre-processing tasks"
-    )
+    parser.add_argument("--pre_processing", help="a module that perform pre-processing tasks")
     parser.add_argument(
         "--checkpoint",
         required=False,
@@ -164,6 +152,7 @@ def _select_stocks(finder: AiZynthFinder, args: argparse.Namespace) -> None:
 def _load_checkpoint(
     checkpoint: str,
 ) -> Dict[str, List[Any]]:
+    """Load checkpointed batch results from newline-delimited JSON."""
     if not os.path.exists(checkpoint):
         return defaultdict(list)
     with open(checkpoint) as json_file:
@@ -171,9 +160,7 @@ def _load_checkpoint(
 
     checkpoint_results = defaultdict(list)
     if checkpoint_data:
-        checkpoint_results["processed_smiles"] = [
-            data["processed_smiles"] for data in checkpoint_data
-        ]
+        checkpoint_results["processed_smiles"] = [data["processed_smiles"] for data in checkpoint_data]
         for data in checkpoint_data:
             for key, value in data["results"].items():
                 checkpoint_results[key].append(value)
@@ -213,9 +200,7 @@ def _process_single_smiles(
     if do_clustering:
         _do_clustering(finder, stats, detailed_results=False)
     _do_post_processing(finder, stats, post_processing)
-    stats_str = "\n".join(
-        f"{key.replace('_', ' ')}: {value}" for key, value in stats.items()
-    )
+    stats_str = "\n".join(f"{key.replace('_', ' ')}: {value}" for key, value in stats.items())
     logger().info(stats_str)
 
 
@@ -229,8 +214,7 @@ def _process_multi_smiles(
     checkpoint: Optional[str],
 ) -> None:
     output_name = output_name or "output.json.gz"
-    with open(filename, "r") as fileobj:
-        smiles = [line.strip() for line in fileobj.readlines()]
+    smiles = list(load_smiles_batch(filename).smiles)
 
     checkpoint_data: StrDict = defaultdict(list)
     if checkpoint:
@@ -240,11 +224,7 @@ def _process_multi_smiles(
 
     results: StrDict = defaultdict(list)
     if checkpoint_data:
-        results = {
-            key: value
-            for key, value in checkpoint_data.items()
-            if key != "processed_smiles"
-        }
+        results = {key: value for key, value in checkpoint_data.items() if key != "processed_smiles"}
     for idx, smi in enumerate(smiles):
         if pre_processing:
             pre_processing(finder, idx)
@@ -269,19 +249,12 @@ def _process_multi_smiles(
         for key, value in stats.items():
             processed_results[key] = value
         processed_results["stock_info"] = finder.stock_info()
-        processed_results["trees"] = finder.routes.dict_with_extra(
-            include_metadata=True, include_scores=True
-        )
+        processed_results["trees"] = finder.routes.dict_with_extra(include_metadata=True, include_scores=True)
 
         if checkpoint:
             with open(checkpoint, "a") as checkpoint_file:
-                checkpoint_file.write(
-                    json.dumps({"processed_smiles": smi, "results": processed_results})
-                    + "\n"
-                )
-            logger().debug(
-                f"Results for processed smiles '{smi}' saved to {checkpoint}"
-            )
+                checkpoint_file.write(json.dumps({"processed_smiles": smi, "results": processed_results}) + "\n")
+            logger().debug(f"Results for processed smiles '{smi}' saved to {checkpoint}")
 
         for key, value in processed_results.items():
             results[key].append(value)
@@ -316,9 +289,7 @@ def _multiprocess_smiles(args: argparse.Namespace) -> None:
         return cmd_args
 
     if not os.path.exists(args.smiles):
-        raise ValueError(
-            "For multiprocessing execution the --smiles argument needs to be a filename"
-        )
+        raise ValueError("For multiprocessing execution the --smiles argument needs to be a filename")
 
     setup_logger(logging.INFO)
     filenames = split_file(args.smiles, args.nproc)

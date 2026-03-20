@@ -1,21 +1,19 @@
-""" Module containing a class for encapsulating the settings of the tree search
-"""
+"""Configuration objects for the retrosynthesis runtime."""
+
 from __future__ import annotations
 
-import os
-import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import yaml
-
 from aizynthfinder.context.policy import ExpansionPolicy, FilterPolicy
+from aizynthfinder.schemas import PostProcessingSchema, SearchSettingsSchema
+from aizynthfinder.services.configuration import load_configuration_dict, validate_runtime_config
 from aizynthfinder.context.scoring import ScorerCollection
 from aizynthfinder.context.stock import Stock
 from aizynthfinder.utils.logging import logger
 
 if TYPE_CHECKING:
-    from aizynthfinder.utils.type_utils import Any, Dict, List, Optional, StrDict, Union
+    from aizynthfinder.utils.type_utils import Any, Dict, List, Optional, StrDict
 
 
 @dataclass
@@ -55,15 +53,15 @@ class _SearchConfiguration:
 
 @dataclass
 class Configuration:
-    """
-    Encapsulating the settings of the tree search, including the policy,
-    the stock, the loaded scorers and various parameters.
+    """Store runtime settings and loaded planning resources.
+
+    This dataclass represents the internal mutable runtime state used by the
+    search engine. External configuration is validated with Pydantic schemas
+    before being converted into these dataclass-based runtime objects.
     """
 
     search: _SearchConfiguration = field(default_factory=_SearchConfiguration)
-    post_processing: _PostprocessingConfiguration = field(
-        default_factory=_PostprocessingConfiguration
-    )
+    post_processing: _PostprocessingConfiguration = field(default_factory=_PostprocessingConfiguration)
     stock: Stock = field(init=False)
     expansion_policy: ExpansionPolicy = field(init=False)
     filter_policy: FilterPolicy = field(init=False)
@@ -91,21 +89,26 @@ class Configuration:
 
     @classmethod
     def from_dict(cls, source: StrDict) -> "Configuration":
-        """
-        Loads a configuration from a dictionary structure.
-        The parameters not set in the dictionary are taken from the default values.
-        The policies and stocks specified are directly loaded.
+        """Load configuration from a dictionary payload.
 
-        :param source: the dictionary source
-        :return: a Configuration object with settings from the source
+        Args:
+            source: The user-provided configuration dictionary.
+
+        Returns:
+            A populated runtime configuration object.
+
+        Raises:
+            AttributeError: If an unsupported setting key is provided.
+            ValueError: If the configuration values fail validation.
         """
-        expansion_config = source.pop("expansion", {})
-        filter_config = source.pop("filter", {})
-        stock_config = source.pop("stock", {})
-        scorer_config = source.pop("scorer", {})
+        validated = validate_runtime_config(dict(source)).model_dump(exclude_none=True)
+        expansion_config = validated.pop("expansion", {})
+        filter_config = validated.pop("filter", {})
+        stock_config = validated.pop("stock", {})
+        scorer_config = validated.pop("scorer", {})
 
         config_obj = Configuration()
-        config_obj._update_from_config(dict(source))
+        config_obj._update_from_config(validated)
 
         config_obj.expansion_policy.load_from_config(**expansion_config)
         config_obj.filter_policy.load_from_config(**filter_config)
@@ -117,53 +120,34 @@ class Configuration:
 
     @classmethod
     def from_file(cls, filename: str) -> "Configuration":
-        """
-        Loads a configuration from a yaml file.
-        The parameters not set in the yaml file are taken from the default values.
-        The policies and stocks specified in the yaml file are directly loaded.
-        The parameters in the yaml file may also contain environment variables as
-        values.
+        """Load configuration from a YAML file.
 
-        :param filename: the path to a yaml file
-        :return: a Configuration object with settings from the yaml file
-        :raises:
-            ValueError: if parameter's value expects an environment variable that
-                does not exist in the current environment
+        Args:
+            filename: The path to a YAML configuration file.
+
+        Returns:
+            A populated runtime configuration object.
+
+        Raises:
+            ValueError: If required environment variables are missing or the
+                configuration content fails validation.
         """
-        with open(filename, "r") as fileobj:
-            txt = fileobj.read()
-        environ_var = re.findall(r"\$\{.+?\}", txt)
-        for item in environ_var:
-            if item[2:-1] not in os.environ:
-                raise ValueError(f"'{item[2:-1]}' not in environment variables")
-            txt = txt.replace(item, os.environ[item[2:-1]])
-        _config = yaml.load(txt, Loader=yaml.SafeLoader)
-        return Configuration.from_dict(_config)
+        return Configuration.from_dict(load_configuration_dict(filename))
 
     def _update_from_config(self, config: StrDict) -> None:
-        self.post_processing = _PostprocessingConfiguration(
-            **config.pop("post_processing", {})
-        )
+        """Update runtime dataclasses from already-validated config sections.
 
-        search_config = config.pop("search", {})
-        for setting, value in search_config.items():
+        Args:
+            config: A validated configuration dictionary.
+        """
+        post_processing = PostProcessingSchema.model_validate(config.pop("post_processing", {}))
+        self.post_processing = _PostprocessingConfiguration(**post_processing.model_dump())
+
+        search_config = SearchSettingsSchema.model_validate(config.pop("search", {}))
+        for setting, value in search_config.model_dump().items():
             if value is None:
                 continue
-            if not hasattr(self.search, setting):
-                raise AttributeError(f"Could not find attribute to set: {setting}")
-            if setting.endswith("_bonds"):
-                if not isinstance(value, list):
-                    raise ValueError("Bond settings need to be lists")
-                value = _handle_bond_pair_tuples(value) if value else []
             if setting == "algorithm_config":
-                if not isinstance(value, dict):
-                    raise ValueError("algorithm_config settings need to be dictionary")
                 self.search.algorithm_config.update(value)
             else:
                 setattr(self.search, setting, value)
-
-
-def _handle_bond_pair_tuples(bonds: List[List[int]]) -> List[List[int]]:
-    if not all(len(bond_pair) == 2 for bond_pair in bonds):
-        raise ValueError("Lists of bond pairs to break/freeze should be of length 2")
-    return [bond_pair[:2] for bond_pair in bonds]
