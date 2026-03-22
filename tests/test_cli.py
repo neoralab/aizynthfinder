@@ -441,3 +441,18 @@ def test_download_public_data(tmpdir, mocker, add_cli_arguments):
     assert len(policies["uspto"]) == 2
     stocks = config.get("stock", {})
     assert "zinc" in stocks
+
+
+def test_download_public_data_with_gcs_config_path(tmpdir, mocker, add_cli_arguments):
+    request_mock = mocker.patch("aizynthfinder.tools.download_public_data.requests.get")
+    response_mock = request_mock.return_value
+    response_mock.__enter__.return_value.iter_content.return_value = [b"abc"]
+    add_cli_arguments(f"{tmpdir} --gcs-path gs://sample-data")
+
+    download_main()
+
+    with open(tmpdir / "config.yml", "r") as fileobj:
+        config = yaml.load(fileobj.read(), Loader=yaml.SafeLoader)
+
+    assert config["expansion"]["uspto"][0] == "gs://sample-data/uspto_model.onnx"
+    assert config["stock"]["zinc"] == "gs://sample-data/zinc_stock.hdf5"

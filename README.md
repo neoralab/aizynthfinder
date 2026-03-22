@@ -43,6 +43,14 @@ download_public_data ./public-data
 
 That command creates a usable `config.yml` alongside the downloaded assets.
 
+If your runtime will read the assets from Google Cloud Storage instead of the local folder, you can still download the starter bundle locally while writing `gs://sample-data/...` paths into the generated config:
+
+```bash
+download_public_data ./public-data --gcs-path gs://sample-data
+```
+
+For example, the generated `config.yml` will point to assets such as `gs://sample-data/uspto_model.onnx` and `gs://sample-data/zinc_stock.hdf5`.
+
 ### Run the CLI
 
 Single target:

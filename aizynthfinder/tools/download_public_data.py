@@ -1,8 +1,9 @@
-""" Module with script to download public data
-"""
+"""Module with script to download public data."""
 import argparse
 import os
+import posixpath
 import sys
+from urllib.parse import urlparse
 
 import requests
 import tqdm
@@ -48,6 +49,14 @@ stock:
 """
 
 
+def _join_data_path(base_path: str, filename: str) -> str:
+    if base_path.startswith("gs://"):
+        parsed = urlparse(base_path)
+        remote_path = posixpath.join(parsed.netloc, parsed.path.lstrip("/"), filename)
+        return f"gs://{remote_path}"
+    return os.path.join(os.path.abspath(base_path), filename)
+
+
 def _download_file(url: str, filename: str) -> None:
     with requests.get(url, stream=True) as response:
         response.raise_for_status()
@@ -68,9 +77,14 @@ def main() -> None:
     parser.add_argument(
         "path",
         default=".",
-        help="the path to download the files",
+        help="the local path to download the files and write config.yml",
     )
-    path = parser.parse_args().path
+    parser.add_argument(
+        "--gcs-path",
+        help="optional gs:// path to use in config.yml instead of local file paths",
+    )
+    args = parser.parse_args()
+    path = args.path
 
     try:
         for filespec in FILES_TO_DOWNLOAD.values():
@@ -79,20 +93,16 @@ def main() -> None:
         print(f"Download failed with message {str(err)}")
         sys.exit(1)
 
+    config_base_path = args.gcs_path or path
     with open(os.path.join(path, "config.yml"), "w") as fileobj:
-        path = os.path.abspath(path)
         fileobj.write(
             YAML_TEMPLATE.format(
-                os.path.join(path, FILES_TO_DOWNLOAD["policy_model_onnx"]["filename"]),
-                os.path.join(path, FILES_TO_DOWNLOAD["template_file"]["filename"]),
-                os.path.join(
-                    path, FILES_TO_DOWNLOAD["ringbreaker_model_onnx"]["filename"]
-                ),
-                os.path.join(
-                    path, FILES_TO_DOWNLOAD["ringbreaker_templates"]["filename"]
-                ),
-                os.path.join(path, FILES_TO_DOWNLOAD["filter_policy_onnx"]["filename"]),
-                os.path.join(path, FILES_TO_DOWNLOAD["stock"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["policy_model_onnx"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["template_file"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["ringbreaker_model_onnx"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["ringbreaker_templates"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["filter_policy_onnx"]["filename"]),
+                _join_data_path(config_base_path, FILES_TO_DOWNLOAD["stock"]["filename"]),
             )
         )
     print("Configuration file written to config.yml")
