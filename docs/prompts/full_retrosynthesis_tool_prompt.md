@@ -48,3 +48,14 @@ Output requirements:
 ```bash
 aizynthcli --config {CONFIG_FILE} --smiles "{SMILES}" --output trees.json
 ```
+
+
+## Tool entry point
+
+For programmatic tool execution, you can now use:
+
+```bash
+aizynthplan --config {CONFIG_FILE} --smiles "{SMILES}" [--output planning.json]
+```
+
+This command prints a structured JSON payload based on Pydantic schemas, including the input SMILES, summary fields, stock information, full routes payload, and any classified planning error.
