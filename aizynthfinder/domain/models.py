@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -27,8 +28,10 @@ class PlannerRunArtifacts:
         target_smiles: The input target used for the run.
         statistics: Aggregated search statistics.
         stock_info: Stock availability extracted from built routes.
+        routes: Serialized full retrosynthesis trees and scores.
     """
 
     target_smiles: str
     statistics: dict[str, object]
     stock_info: dict[str, object]
+    routes: list[dict[str, Any]]

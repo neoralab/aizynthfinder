@@ -9,6 +9,22 @@ from aizynthfinder.domain import PlannerRunArtifacts
 from aizynthfinder.schemas import PlanningRequest, PlanningResult
 
 
+def _configure_finder_from_request(request: PlanningRequest) -> AiZynthFinder:
+    """Create and configure a finder from a validated planning request."""
+    finder = AiZynthFinder(configfile=request.config_file, configdict=request.config)
+    if request.stocks:
+        finder.stock.select(request.stocks)
+    if request.policy:
+        finder.expansion_policy.select(request.policy)
+    else:
+        finder.expansion_policy.select(finder.expansion_policy.items[0])
+    if request.filter:
+        finder.filter_policy.select(request.filter)
+    else:
+        finder.filter_policy.select_all()
+    return finder
+
+
 def plan_reaction_routes(request: PlanningRequest) -> PlanningResult:
     """Execute a single planning request via the existing synchronous core.
 
@@ -16,18 +32,20 @@ def plan_reaction_routes(request: PlanningRequest) -> PlanningResult:
         request: A validated planning request.
 
     Returns:
-        A serialized planning result.
+        A serialized planning result including full route payloads.
     """
-    finder = AiZynthFinder(configfile=request.config_file, configdict=request.config)
+    finder = _configure_finder_from_request(request)
     finder.target_smiles = request.smiles
     finder.prepare_tree()
-    search_time = finder.tree_search()
+    search_time = finder.tree_search(show_progress=request.show_progress)
     finder.build_routes(scorer=request.scorer)
+    finder.routes.compute_scores(*finder.scorers.objects())
 
     artifacts = PlannerRunArtifacts(
         target_smiles=finder.target_smiles,
         statistics=finder.extract_statistics(),
         stock_info=finder.stock_info(),
+        routes=finder.routes.dict_with_extra(include_metadata=True, include_scores=True),
     )
     return PlanningResult(
         target_smiles=artifacts.target_smiles,
@@ -35,6 +53,7 @@ def plan_reaction_routes(request: PlanningRequest) -> PlanningResult:
         solved=bool(artifacts.statistics.get("is_solved", False)),
         statistics=artifacts.statistics,
         stock_info=artifacts.stock_info,
+        routes=artifacts.routes,
     )
 
 
