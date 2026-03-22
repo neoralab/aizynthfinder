@@ -39,3 +39,37 @@ class PlanningResult(BaseModel):
     statistics: dict[str, object] = Field(default_factory=dict)
     stock_info: dict[str, object] = Field(default_factory=dict)
     routes: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PlanningErrorReport(BaseModel):
+    """Structured error report for planning execution failures."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    message: str
+    category: str
+
+
+class PlanningSummary(BaseModel):
+    """High-level summary extracted from a planning result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    solved: bool | None = None
+    search_time: float | None = None
+    statistics: dict[str, object] = Field(default_factory=dict)
+    stock_info: dict[str, object] = Field(default_factory=dict)
+
+
+class PlanningCliOutput(BaseModel):
+    """Structured JSON payload for CLI and tool-based planning runs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_smiles: str
+    config_file: str
+    summary: PlanningSummary
+    routes: list[dict[str, Any]] = Field(default_factory=list)
+    result: PlanningResult | None = None
+    error: PlanningErrorReport | None = None

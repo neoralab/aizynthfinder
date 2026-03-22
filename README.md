@@ -51,6 +51,8 @@ Single target:
 aizynthcli --config ./public-data/config.yml --smiles "CC(=O)Oc1ccccc1C(=O)O" --output trees.json
 ```
 
+For structured JSON output around the planning service API, you can also run `aizynthplan --config ./public-data/config.yml --smiles "CC(=O)Oc1ccccc1C(=O)O"`.
+
 Batch file:
 
 ```bash
