@@ -6,8 +6,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from IPython.display import display
-from ipywidgets import BoundedIntText, Button, HBox, Label, Output, Tab
+from aizynthfinder.interfaces._notebook_compat import (
+    BoundedIntText,
+    Button,
+    HBox,
+    Label,
+    Output,
+    Tab,
+    display,
+)
 
 try:
     import matplotlib.pylab as plt

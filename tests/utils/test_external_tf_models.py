@@ -9,11 +9,11 @@ from aizynthfinder.utils.models import (
 )
 
 
-@pytest.mark.xfail(
-    condition=not SUPPORT_EXTERNAL_APIS, reason="API packages not installed"
-)
 @pytest.fixture()
 def setup_rest_mock(mocker):
+    if not SUPPORT_EXTERNAL_APIS:
+        pytest.xfail("API packages not installed")
+
     models.TF_SERVING_HOST = "localhost"
     models.TF_SERVING_REST_PORT = "255"
     mocked_request = mocker.patch("aizynthfinder.utils.models.requests.request")
@@ -33,11 +33,11 @@ def setup_rest_mock(mocker):
     models.TF_SERVING_REST_PORT = None
 
 
-@pytest.mark.xfail(
-    condition=not SUPPORT_EXTERNAL_APIS, reason="API packages not installed"
-)
 @pytest.fixture()
 def setup_grpc_mock(mocker, signature_grpc):
+    if not SUPPORT_EXTERNAL_APIS:
+        pytest.xfail("API packages not installed")
+
     models.TF_SERVING_HOST = "localhost"
     models.TF_SERVING_GRPC_PORT = "255"
     mocker.patch("aizynthfinder.utils.models.grpc.insecure_channel")

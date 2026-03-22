@@ -6,13 +6,18 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-import ipywidgets as widgets
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from IPython.display import HTML, display
 from paretoset import paretorank
+
+from aizynthfinder.interfaces._notebook_compat import HTML, display, widgets
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+except ImportError:
+    plt = None
+    sns = None
 
 if TYPE_CHECKING:
     from aizynthfinder.analysis.routes import RouteCollection
@@ -31,12 +36,15 @@ def pareto_fronts_plot(
         [[score_dict[name] for name in scorer_names] for score_dict in routes.scores]
     )
     direction_arr = np.repeat("max", len(scorer_names))
-    pareto_ranks = paretorank(scores, sense=direction_arr, distinct=False)
+    pareto_ranks = paretorank(scores, sense=direction_arr.tolist(), distinct=False)
 
     pareto_fronts = pd.DataFrame(scores, columns=scorer_names)
     pareto_fronts.loc[:, "pareto_rank"] = pareto_ranks
     pareto_fronts.loc[:, "route"] = np.arange(1, scores.shape[0] + 1)
     pareto_fronts_unique = pareto_fronts.drop_duplicates(scorer_names)
+    if plt is None or sns is None:
+        return
+
     # Apply the default theme
     sns.set_theme()
     fig = sns.relplot(

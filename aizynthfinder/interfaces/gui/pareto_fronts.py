@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from IPython.display import display
-from ipywidgets import Button, Checkbox, Dropdown, HBox, IntRangeSlider, Output, VBox
 from aizynthfinder.analysis import (
     RouteCollection,
     RouteSelectionArguments,
     TreeAnalysis,
+)
+from aizynthfinder.interfaces._notebook_compat import (
+    Button,
+    Checkbox,
+    Dropdown,
+    HBox,
+    IntRangeSlider,
+    Output,
+    VBox,
+    display,
 )
 from aizynthfinder.interfaces.gui.utils import pareto_fronts_plot, route_display
 

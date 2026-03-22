@@ -11,43 +11,36 @@ from typing import TYPE_CHECKING, Any
 from rdkit import Chem
 
 from aizynthfinder.aizynthfinder import AiZynthFinder
+from aizynthfinder.interfaces._notebook_compat import (
+    HTML,
+    BoundedIntText,
+    Button,
+    Checkbox,
+    Dropdown,
+    HBox,
+    IntText,
+    Label,
+    Output,
+    SelectMultiple,
+    Text,
+    VBox,
+    display,
+    widgets,
+)
 from aizynthfinder.utils.logging import setup_logger
 
 if TYPE_CHECKING:
-    import ipywidgets as widgets
-    from IPython.display import HTML
-    from ipywidgets import BoundedIntText, Button, Checkbox, Dropdown, HBox, IntText, Label, Output, SelectMultiple, Text, VBox
-
     from aizynthfinder.utils.type_utils import StrDict
 
 
 def _load_notebook_dependencies() -> dict[str, Any]:
     try:
-        import ipywidgets as widgets
         import jupytext
-        from IPython.display import HTML, display
-        from ipywidgets import (
-            BoundedIntText,
-            Button,
-            Checkbox,
-            Dropdown,
-            HBox,
-            IntText,
-            Label,
-            Output,
-            SelectMultiple,
-            Text,
-            VBox,
-        )
-    except ImportError as err:
-        raise ImportError(
-            "Notebook support is not installed. Install with `uv pip install -e .[notebooks]` "
-            "or `uv sync --extra notebooks`."
-        ) from err
+    except ImportError:
+        jupytext = None
 
     return {
         "widgets": widgets,
-        "jupytext": jupytext,
         "HTML": HTML,
         "display": display,
         "BoundedIntText": BoundedIntText,
@@ -61,6 +54,7 @@ def _load_notebook_dependencies() -> dict[str, Any]:
         "SelectMultiple": SelectMultiple,
         "Text": Text,
         "VBox": VBox,
+        "jupytext": jupytext,
     }
 
 
@@ -430,22 +424,29 @@ def main() -> None:
         ]
     )
     nb_deps = _ensure_notebook_dependencies()
-    notebook = nb_deps["jupytext"].reads(commands, fmt="py:percent")
     if args.output:
         filename = args.output
     else:
         _, filename = tempfile.mkstemp(suffix=".ipynb")
-    nb_deps["jupytext"].write(notebook, filename, fmt="ipynb")
+
+    if nb_deps["jupytext"] is None:
+        with open(filename, "w") as fileobj:
+            fileobj.write(commands)
+    else:
+        notebook = nb_deps["jupytext"].reads(commands, fmt="py:percent")
+        nb_deps["jupytext"].write(notebook, filename, fmt="ipynb")
 
     if args.output:
         print(f"Notebook saved to {filename}. It can now be open with Jupyter notebook")
         return
 
+    proc = None
     try:
         proc = subprocess.Popen(f"jupyter notebook {filename}".split())
         proc.communicate()
     except KeyboardInterrupt:
-        proc.send_signal(signal.SIGINT)
+        if proc is not None:
+            proc.send_signal(signal.SIGINT)
 
 
 if __name__ == "__main__":
