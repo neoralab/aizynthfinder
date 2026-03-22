@@ -78,6 +78,30 @@ print(finder.extract_statistics())
 print(finder.routes.dict_with_extra(include_scores=True))
 ```
 
+### Service-layer API for tool integration
+
+If you want another tool or agent to submit a SMILES string and receive the full retrosynthesis payload in one call, use the planning service layer:
+
+```python
+from aizynthfinder.schemas import PlanningRequest
+from aizynthfinder.services import plan_reaction_routes
+
+result = plan_reaction_routes(
+    PlanningRequest(
+        smiles="CC(=O)Oc1ccccc1C(=O)O",
+        config_file="./public-data/config.yml",
+        show_progress=False,
+    )
+)
+
+print(result.solved)
+print(result.statistics)
+print(result.stock_info)
+print(result.routes)  # full serialized retrosynthesis trees
+```
+
+A reusable agent prompt is included at [`docs/prompts/full_retrosynthesis_tool_prompt.md`](docs/prompts/full_retrosynthesis_tool_prompt.md).
+
 ## Development workflow
 
 ### Sync a development environment

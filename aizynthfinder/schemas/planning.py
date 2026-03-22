@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlanningRequest(BaseModel):
@@ -13,7 +15,17 @@ class PlanningRequest(BaseModel):
     smiles: str = Field(min_length=1)
     config_file: str | None = None
     config: dict[str, object] | None = None
+    policy: str | list[str] | None = None
+    filter: list[str] = Field(default_factory=list)
+    stocks: list[str] = Field(default_factory=list)
     scorer: str | list[str] | None = None
+    show_progress: bool = False
+
+    @model_validator(mode="after")
+    def validate_configuration_source(self) -> "PlanningRequest":
+        if not self.config_file and not self.config:
+            raise ValueError("either 'config_file' or 'config' must be provided")
+        return self
 
 
 class PlanningResult(BaseModel):
@@ -26,3 +38,4 @@ class PlanningResult(BaseModel):
     solved: bool
     statistics: dict[str, object] = Field(default_factory=dict)
     stock_info: dict[str, object] = Field(default_factory=dict)
+    routes: list[dict[str, Any]] = Field(default_factory=list)
