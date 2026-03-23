@@ -43,19 +43,4 @@ Output requirements:
 
 - The package only ships the code; model, stock, and template assets still need to be available through the selected config file.
 - `plan_reaction_routes()` returns a validated `PlanningResult` object with the full serialized retrosynthesis routes in `routes`.
-- For CLI usage, the equivalent command is typically:
-
-```bash
-aizynthcli --config {CONFIG_FILE} --smiles "{SMILES}" --output trees.json
-```
-
-
-## Tool entry point
-
-For programmatic tool execution, you can now use:
-
-```bash
-aizynthplan --config {CONFIG_FILE} --smiles "{SMILES}" [--output planning.json]
-```
-
-This command prints a structured JSON payload based on Pydantic schemas, including the input SMILES, summary fields, stock information, full routes payload, and any classified planning error.
+- Prefer the Python service-layer API directly for tool integration so validation and serialization stay in one place.

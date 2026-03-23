@@ -9,7 +9,7 @@ AiZynthFinder is a CPU-friendly retrosynthesis planning toolkit for Linux-first 
 ## What it provides
 
 - Route planning from SMILES with configurable search strategies.
-- CLI and Python APIs for batch jobs, notebooks, and service integration.
+- Python APIs for direct search control and service-layer integration.
 - Pluggable stocks, scorers, policies, and search implementations.
 - Production-friendly packaging with a `uv` workflow and optional extras.
 - Docker/Linux suitability without requiring GPU dependencies.
@@ -27,7 +27,6 @@ uv pip install aizynthfinder
 Optional extras stay behind extras so the default install remains lean:
 
 ```bash
-uv pip install "aizynthfinder[notebooks]"
 uv pip install "aizynthfinder[tf]"
 uv pip install "aizynthfinder[mongo,bloom]"
 uv pip install "aizynthfinder[all]"
@@ -42,28 +41,6 @@ download_public_data ./public-data
 ```
 
 That command creates a usable `config.yml` alongside the downloaded assets.
-
-### Run the CLI
-
-Single target:
-
-```bash
-aizynthcli --config ./public-data/config.yml --smiles "CC(=O)Oc1ccccc1C(=O)O" --output trees.json
-```
-
-For structured JSON output around the planning service API, you can also run `aizynthplan --config ./public-data/config.yml --smiles "CC(=O)Oc1ccccc1C(=O)O"`.
-
-Batch file:
-
-```bash
-aizynthcli --config ./public-data/config.yml --smiles molecules.txt --output output.json.gz
-```
-
-Notebook/web UI:
-
-```bash
-aizynthapp --config ./public-data/config.yml
-```
 
 ## Python API
 
@@ -125,7 +102,6 @@ uv pip install -e ".[dev]"
 
 ```bash
 uv run pytest -v
-uv run pytest tests/test_cli.py -v
 uv run ruff check .
 ```
 
@@ -142,7 +118,15 @@ A simple container workflow is:
 ```bash
 docker build -t aizynthfinder .
 docker run --rm -it -v "$PWD/public-data:/opt/data" aizynthfinder \
-  aizynthcli --config /opt/data/config.yml --smiles "CCO"
+  python - <<'PY'
+from aizynthfinder.schemas import PlanningRequest
+from aizynthfinder.services import plan_reaction_routes
+
+result = plan_reaction_routes(
+    PlanningRequest(smiles="CCO", config_file="/opt/data/config.yml", show_progress=False)
+)
+print(result.model_dump_json(indent=2))
+PY
 ```
 
 Use bind mounts for model/stock assets rather than baking large data files into the image unless you control that deployment pipeline.
@@ -151,7 +135,6 @@ Use bind mounts for model/stock assets rather than baking large data files into 
 
 The package is organized around a small set of responsibilities:
 
-- `aizynthfinder.cli`: CLI-oriented orchestration helpers.
 - `aizynthfinder.config`: configuration entry points and compatibility exports.
 - `aizynthfinder.schemas`: Pydantic models for validated external contracts.
 - `aizynthfinder.domain`: dataclasses for internal immutable value objects.

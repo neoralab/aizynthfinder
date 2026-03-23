@@ -18,8 +18,6 @@ Currently, there are a few scoring functions available
 The *State score* is the score that is guiding the tree search in the :doc:`update phase <sequences>`, and 
 this is not configurable. 
 
-In the Jupyter notebook :doc:`GUI <gui>` one can choose to score the routes with any of the loaded the scorers. 
-
 The first four scoring functions are loaded automatically when an ``aizynthfinder`` object is created.
 
 
@@ -51,13 +49,12 @@ This is an example of that.
 This can then be added to the ``scorers`` attribute of an ``aizynthfinderfinder`` object. The ``scorers`` attribute is a collection
 of ``Scorer`` objects.
 
-For instance to use this in the Jupyter notebook GUI, one can do
+For instance, to use this from the Python API:
 
 .. code-block:: python
 
-    from aizynthfinder.interfaces import AiZynthApp
-    app = AiZynthApp("config_local.yml", setup=False)
-    scorer = DeltaNumberOfTransformsScorer(app.finder.config)
-    app.finder.scorers.load(scorer)
-    app.setup()
+    from aizynthfinder.aizynthfinder import AiZynthFinder
 
+    finder = AiZynthFinder("config_local.yml")
+    scorer = DeltaNumberOfTransformsScorer(finder.config)
+    finder.scorers.load(scorer)
