@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from aizynthfinder.schemas import PlanningRuntimeSchema
 
 _ENV_PATTERN = re.compile(r"\$\{.+?\}")
+_FORBIDDEN_ATTRIBUTE_GROUPS = {"search", "post_processing"}
 
 
 def _expand_environment_variables(text: str) -> str:
@@ -36,6 +37,22 @@ def _expand_environment_variables(text: str) -> str:
     return text
 
 
+def _raise_for_validation_error(err: ValidationError) -> None:
+    """Convert schema-validation errors to the historic service exceptions."""
+    first_error = err.errors()[0]
+    location = first_error.get("loc", ())
+    if (
+        len(location) == 2
+        and location[0] in _FORBIDDEN_ATTRIBUTE_GROUPS
+        and first_error.get("type") == "extra_forbidden"
+    ):
+        raise AttributeError(f"Could not find attribute to set: {location[1]}") from err
+
+    location_str = ".".join(str(part) for part in location)
+    message = first_error.get("msg", str(err))
+    raise ValueError(f"{location_str}: {message}" if location_str else message) from err
+
+
 def validate_runtime_config(source: dict[str, Any]) -> PlanningRuntimeSchema:
     """Validate a runtime configuration payload.
 
@@ -52,15 +69,8 @@ def validate_runtime_config(source: dict[str, Any]) -> PlanningRuntimeSchema:
     try:
         return PlanningRuntimeSchema.model_validate(source)
     except ValidationError as err:
-        first_error = err.errors()[0]
-        location = first_error.get("loc", ())
-        if len(location) == 2 and location[0] == "search" and first_error.get("type") == "extra_forbidden":
-            raise AttributeError(f"Could not find attribute to set: {location[1]}") from err
-        if len(location) == 2 and location[0] == "post_processing" and first_error.get("type") == "extra_forbidden":
-            raise AttributeError(f"Could not find attribute to set: {location[1]}") from err
-        location_str = ".".join(str(part) for part in location)
-        message = first_error.get("msg", str(err))
-        raise ValueError(f"{location_str}: {message}" if location_str else message) from err
+        _raise_for_validation_error(err)
+        raise AssertionError("unreachable") from err
 
 
 def load_configuration_dict(filename: str | Path) -> dict[str, Any]:

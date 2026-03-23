@@ -10,7 +10,8 @@ import os
 import tempfile
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Callable
 
 import pandas as pd
 
@@ -113,11 +114,11 @@ def _load_postprocessing_jobs(modules: Optional[List[str]]) -> List[_PostProcess
         try:
             module = importlib.import_module(module_name)
         except ModuleNotFoundError:
-            pass
-        else:
-            if hasattr(module, "post_processing"):
-                print(f"Adding post-processing job from {module_name}")
-                jobs.append(getattr(module, "post_processing"))
+            logger().warning("Post-processing module '%s' could not be imported", module_name)
+            continue
+        if hasattr(module, "post_processing"):
+            print(f"Adding post-processing job from {module_name}")
+            jobs.append(getattr(module, "post_processing"))
     return jobs
 
 
@@ -128,11 +129,12 @@ def _load_preprocessing_job(module_name: Optional[str]) -> Optional[_PreProcessi
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError:
-        pass
-    else:
-        if hasattr(module, "pre_processing"):
-            print(f"Adding pre-processing job from {module_name}")
-            return getattr(module, "pre_processing")
+        logger().warning("Pre-processing module '%s' could not be imported", module_name)
+        return None
+
+    if hasattr(module, "pre_processing"):
+        print(f"Adding pre-processing job from {module_name}")
+        return getattr(module, "pre_processing")
     return None
 
 
@@ -167,6 +169,66 @@ def _load_checkpoint(
     return checkpoint_results
 
 
+def _prepare_and_build_routes(
+    finder: AiZynthFinder,
+    smiles: str,
+    show_progress: bool,
+) -> float:
+    """Prepare the search tree, execute search, and build scored routes."""
+    finder.target_smiles = smiles
+    finder.prepare_tree()
+    search_time = finder.tree_search(show_progress=show_progress)
+    finder.build_routes()
+    finder.routes.compute_scores(*finder.scorers.objects())
+    return search_time
+
+
+def _format_setup_error(smiles: str | None, error: ValueError) -> str:
+    prefix = f"Failed to setup search for {smiles}" if smiles else "Failed to setup search"
+    return f"{prefix} due to: '{str(error).lower()}'"
+
+
+def _store_processed_results(
+    results: StrDict,
+    processed_results: StrDict,
+) -> None:
+    for key, value in processed_results.items():
+        results[key].append(value)
+
+
+def _create_processed_results(
+    finder: AiZynthFinder,
+    stats: StrDict,
+) -> StrDict:
+    processed_results = dict(stats)
+    processed_results["stock_info"] = finder.stock_info()
+    processed_results["trees"] = finder.routes.dict_with_extra(include_metadata=True, include_scores=True)
+    return processed_results
+
+
+def _append_checkpoint_entry(checkpoint: str, smiles: str, processed_results: StrDict) -> None:
+    with open(checkpoint, "a") as checkpoint_file:
+        checkpoint_file.write(json.dumps({"processed_smiles": smiles, "results": processed_results}) + "\n")
+    logger().debug("Results for processed smiles '%s' saved to %s", smiles, checkpoint)
+
+
+def _configure_policy_selection(finder: AiZynthFinder, args: argparse.Namespace) -> None:
+    finder.expansion_policy.select(args.policy or finder.expansion_policy.items[0])
+    if args.filter:
+        finder.filter_policy.select(args.filter)
+        return
+    finder.filter_policy.select_all()
+
+
+def _prepare_finder(args: argparse.Namespace) -> tuple[AiZynthFinder, List[_PostProcessingJob], Optional[_PreProcessingJob]]:
+    finder = AiZynthFinder(configfile=args.config)
+    _select_stocks(finder, args)
+    post_processing = _load_postprocessing_jobs(args.post_processing)
+    pre_processing = _load_preprocessing_job(args.pre_processing)
+    _configure_policy_selection(finder, args)
+    return finder, post_processing, pre_processing
+
+
 def _process_single_smiles(
     smiles: str,
     finder: AiZynthFinder,
@@ -176,17 +238,13 @@ def _process_single_smiles(
     pre_processing: Optional[_PreProcessingJob],
 ) -> None:
     output_name = output_name or "trees.json"
-    finder.target_smiles = smiles
     if pre_processing:
         pre_processing(finder, -1)
     try:
-        finder.prepare_tree()
+        _prepare_and_build_routes(finder, smiles, show_progress=True)
     except ValueError as err:
-        print(f"Failed to setup search due to: '{str(err).lower()}'")
+        print(_format_setup_error(None, err))
         return
-    finder.tree_search(show_progress=True)
-    finder.build_routes()
-    finder.routes.compute_scores(*finder.scorers.objects())
 
     with open(output_name, "w") as fileobj:
         json.dump(
@@ -194,7 +252,7 @@ def _process_single_smiles(
             fileobj,
             indent=2,
         )
-    logger().info(f"Trees saved to {output_name}")
+    logger().info("Trees saved to %s", output_name)
 
     stats = finder.extract_statistics()
     if do_clustering:
@@ -228,43 +286,36 @@ def _process_multi_smiles(
     for idx, smi in enumerate(smiles):
         if pre_processing:
             pre_processing(finder, idx)
-        processed_results = {}
-        finder.target_smiles = smi
         try:
-            finder.prepare_tree()
+            search_time = _prepare_and_build_routes(finder, smi, show_progress=False)
         except ValueError as err:
-            print(f"Failed to setup search for {smi} due to: '{str(err).lower()}'")
+            print(_format_setup_error(smi, err))
             continue
-        search_time = finder.tree_search()
-        finder.build_routes()
-        finder.routes.compute_scores(*finder.scorers.objects())
-        stats = finder.extract_statistics()
 
+        stats = finder.extract_statistics()
         solved_str = "is solved" if stats["is_solved"] else "is not solved"
-        logger().info(f"Done with {smi} in {search_time:.3} s and {solved_str}")
+        logger().info("Done with %s in %.3f s and %s", smi, search_time, solved_str)
         if do_clustering:
             _do_clustering(finder, stats, detailed_results=True)
         _do_post_processing(finder, stats, post_processing)
 
-        for key, value in stats.items():
-            processed_results[key] = value
-        processed_results["stock_info"] = finder.stock_info()
-        processed_results["trees"] = finder.routes.dict_with_extra(include_metadata=True, include_scores=True)
-
+        processed_results = _create_processed_results(finder, stats)
         if checkpoint:
-            with open(checkpoint, "a") as checkpoint_file:
-                checkpoint_file.write(json.dumps({"processed_smiles": smi, "results": processed_results}) + "\n")
-            logger().debug(f"Results for processed smiles '{smi}' saved to {checkpoint}")
+            _append_checkpoint_entry(checkpoint, smi, processed_results)
 
-        for key, value in processed_results.items():
-            results[key].append(value)
+        _store_processed_results(results, processed_results)
 
     data = pd.DataFrame.from_dict(results)
     save_datafile(data, output_name)
-    logger().info(f"Output saved to {output_name}")
+    logger().info("Output saved to %s", output_name)
 
 
-def _multiprocess_smiles(args: argparse.Namespace) -> None:
+def _create_multiprocess_command(
+    args: argparse.Namespace,
+    json_files: Iterable[str],
+) -> Callable[[int, str], list[str]]:
+    json_file_list = list(json_files)
+
     def create_cmd(index, filename):
         cmd_args = [
             "aizynthcli",
@@ -273,7 +324,7 @@ def _multiprocess_smiles(args: argparse.Namespace) -> None:
             "--config",
             args.config,
             "--output",
-            json_files[index - 1],
+            json_file_list[index - 1],
         ]
         if args.policy:
             cmd_args.extend(["--policy"] + args.policy)
@@ -288,13 +339,17 @@ def _multiprocess_smiles(args: argparse.Namespace) -> None:
             cmd_args.extend(["--post_processing"] + args.post_processing)
         return cmd_args
 
+    return create_cmd
+
+
+def _multiprocess_smiles(args: argparse.Namespace) -> None:
     if not os.path.exists(args.smiles):
         raise ValueError("For multiprocessing execution the --smiles argument needs to be a filename")
 
     setup_logger(logging.INFO)
     filenames = split_file(args.smiles, args.nproc)
     json_files = [tempfile.mktemp(suffix=".json.gz") for _ in range(args.nproc)]
-    start_processes(filenames, "aizynthcli", create_cmd)
+    start_processes(filenames, "aizynthcli", _create_multiprocess_command(args, json_files))
 
     if not all(os.path.exists(filename) for filename in json_files):
         raise FileNotFoundError(
@@ -324,32 +379,27 @@ def main() -> None:
         _multiprocess_smiles(args)
         return
 
-    multi_smiles = os.path.exists(args.smiles)
+    finder, post_processing, pre_processing = _prepare_finder(args)
+    if os.path.exists(args.smiles):
+        _process_multi_smiles(
+            args.smiles,
+            finder,
+            args.output,
+            args.cluster,
+            post_processing,
+            pre_processing,
+            args.checkpoint,
+        )
+        return
 
-    finder = AiZynthFinder(configfile=args.config)
-    _select_stocks(finder, args)
-    post_processing = _load_postprocessing_jobs(args.post_processing)
-    pre_processing = _load_preprocessing_job(args.pre_processing)
-    finder.expansion_policy.select(args.policy or finder.expansion_policy.items[0])
-    if args.filter:
-        finder.filter_policy.select(args.filter)
-    else:
-        finder.filter_policy.select_all()
-
-    params = [
+    _process_single_smiles(
         args.smiles,
         finder,
         args.output,
         args.cluster,
         post_processing,
         pre_processing,
-        args.checkpoint,
-    ]
-    if multi_smiles:
-        _process_multi_smiles(*params)
-    else:
-        params = params[:-1]
-        _process_single_smiles(*params)
+    )
 
 
 if __name__ == "__main__":
