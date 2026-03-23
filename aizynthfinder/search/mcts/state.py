@@ -54,11 +54,13 @@ class MctsState:
             self.max_transforms >= config.search.max_transforms
         ) or self.is_solved
 
-        inchis = [mol.inchi_key for mol in self.mols]
-        self._hash = hash(tuple(sorted(inchis)))
+        self._inchi_key = tuple(sorted(mol.inchi_key for mol in self.mols))
+        self._hash = hash(self._inchi_key)
 
-        inchis = [mol.inchi_key for mol in self.expandable_mols]
-        self.expandables_hash = hash(tuple(sorted(inchis)))
+        expandable_inchis = tuple(
+            sorted(mol.inchi_key for mol in self.expandable_mols)
+        )
+        self.expandables_hash = hash(expandable_inchis)
 
     def __hash__(self) -> int:
         return self._hash
@@ -66,7 +68,7 @@ class MctsState:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, MctsState):
             return False
-        return self.__hash__() == other.__hash__()
+        return self._inchi_key == other._inchi_key
 
     def __str__(self) -> str:
         """A string representation of the state (for print(state))"""

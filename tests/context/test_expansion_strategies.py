@@ -113,6 +113,46 @@ def test_weighted_multi_expansion_strategy_wrong_weights(
         )
 
 
+def test_weighted_multi_expansion_strategy_accepts_float_rounding(
+    default_config, setup_template_expansion_policy
+):
+    expansion_policy = default_config.expansion_policy
+    strategy1, _ = setup_template_expansion_policy("policy1")
+    expansion_policy.load(strategy1)
+    strategy2, _ = setup_template_expansion_policy("policy2")
+    expansion_policy.load(strategy2)
+
+    multi_expansion_strategy = MultiExpansionStrategy(
+        "multi_expansion_strategy",
+        default_config,
+        expansion_strategies=["policy1", "policy2"],
+        expansion_strategy_weights=[0.1 + 0.2, 0.7],
+    )
+
+    assert multi_expansion_strategy.expansion_strategy_weights == [0.30000000000000004, 0.7]
+
+
+def test_weighted_multi_expansion_strategy_requires_matching_lengths(
+    default_config, setup_template_expansion_policy
+):
+    expansion_policy = default_config.expansion_policy
+    strategy1, _ = setup_template_expansion_policy("policy1")
+    expansion_policy.load(strategy1)
+    strategy2, _ = setup_template_expansion_policy("policy2")
+    expansion_policy.load(strategy2)
+
+    with pytest.raises(
+        ValueError,
+        match="number of expansion strategy weights in MultiExpansion must match",
+    ):
+        MultiExpansionStrategy(
+            "multi_expansion_strategy",
+            default_config,
+            expansion_strategies=["policy1", "policy2"],
+            expansion_strategy_weights=[1.0],
+        )
+
+
 def test_multi_expansion_strategy_cutoff(
     default_config, setup_template_expansion_policy
 ):
