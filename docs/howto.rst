@@ -56,17 +56,20 @@ can be used together
         expansion_strategies: [uspto, ringbreaker]
         additive_expansion: True
 
-and then to use this with ``aizynthcli`` do something like this
+and then to use this with the Python API:
 
-.. code-block::
+.. code-block:: python
 
-    aizynthcli --smiles smiles.txt --config config.yml --policy multi_expansion_strategy
+    from aizynthfinder.aizynthfinder import AiZynthFinder
+
+    finder = AiZynthFinder(configfile="config.yml")
+    finder.expansion_policy.select("multi_expansion_strategy")
 
 
 Output more routes
 ------------------
 
-The number of routes in the output of ``aizynthcli`` can be controlled from the configuration file. 
+The number of extracted routes can be controlled from the configuration file.
 
 This is how you can extract at least 25 routes but not more than 50 per target
 

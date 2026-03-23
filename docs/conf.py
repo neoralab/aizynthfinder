@@ -8,13 +8,6 @@ copyright = "2020-2025, Molecular AI group"
 author = "Molecular AI group"
 release = "4.4.1"
 
-# This make sure that the cli_help.txt file is properly formated
-with open("cli_help.txt", "r") as fileobj:
-    lines = fileobj.read().splitlines()
-with open("cli_help.txt", "w") as fileobj:
-    fileobj.write(".. code-block::\n\n")
-    fileobj.write("  " + "\n  ".join(lines))
-
 extensions = [
     "sphinx.ext.autodoc",
 ]

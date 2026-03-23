@@ -43,8 +43,6 @@ The stop criteria can be specified in the configuration file
                 C: 10
 
 
-In the Jupyter GUI you can set the limit on the element occurences, but currently not the price and amount limits. 
-
 Custom stock
 ------------
 
@@ -63,26 +61,15 @@ This is an example:
           return Lipinski.HeavyAtomCount(mol.rd_mol) < 10
 
 
-To use this stock with the ``aizynthcli`` tool, save it in a ``custom_stock.py`` module that is located in a directory known to 
-the python interpreter. Add this line to the module.
+To use this stock from the Python API:
 
-.. code-block::
+.. code-block:: python
 
-  stock = CriteriaStock()
+  from aizynthfinder.aizynthfinder import AiZynthFinder
 
-
-and it will be automatically used in the tree search. 
-
-Alternatively the custom query class can be used by the ``aizynthapp`` tool.
-
-
-.. code-block::
-
-  from aizynthfinder import AiZynthApp
-  configfile="config_local.yml"
-  app = AiZynthApp(configfile, setup=False)
-  app.finder.stock.load(CriteriaStock(), "criteria") # This loads the custom stock class
-  app.setup()
+  finder = AiZynthFinder("config_local.yml")
+  finder.stock.load(CriteriaStock(), "criteria")
+  finder.stock.select("criteria")
 
 
 Lastly, it is possible to specify a custom stock class in the configuration file if it is located in a module that 
