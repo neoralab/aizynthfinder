@@ -672,6 +672,61 @@ def test_combined_scorer_node_default_weights_product(
     assert round(score, 4) == 0.497
 
 
+def test_combined_scorer_weighted_geometric_changes_score(
+    default_config, setup_mcts_broken_bonds
+):
+    default_config.search.break_bonds = [(1, 2)]
+    _, node = setup_mcts_broken_bonds(config=default_config)
+
+    lower_state_weight = CombinedScorer(
+        default_config,
+        ["state score", "broken bonds"],
+        [0.2, 0.8],
+        combine_strategy="mean-geometric",
+    )
+    higher_state_weight = CombinedScorer(
+        default_config,
+        ["state score", "broken bonds"],
+        [0.8, 0.2],
+        combine_strategy="mean-geometric",
+    )
+
+    assert round(lower_state_weight(node), 4) == 0.5627
+    assert round(higher_state_weight(node), 4) == 0.8833
+
+
+def test_combined_scorer_weighted_product_changes_score(
+    default_config, setup_mcts_broken_bonds
+):
+    default_config.search.break_bonds = [(1, 2)]
+    _, node = setup_mcts_broken_bonds(config=default_config)
+
+    lower_state_weight = CombinedScorer(
+        default_config,
+        ["state score", "broken bonds"],
+        [0.2, 0.8],
+        combine_strategy="product",
+    )
+    higher_state_weight = CombinedScorer(
+        default_config,
+        ["state score", "broken bonds"],
+        [0.8, 0.2],
+        combine_strategy="product",
+    )
+
+    assert round(lower_state_weight(node), 4) == 0.5627
+    assert round(higher_state_weight(node), 4) == 0.8833
+
+
+def test_combined_scorer_requires_matching_weight_length(default_config):
+    with pytest.raises(ValueError, match="number of scorer weights must match"):
+        CombinedScorer(
+            default_config,
+            ["state score", "number of reactions"],
+            [1.0],
+        )
+
+
 def test_combined_scorer_node(default_config, setup_mcts_broken_bonds):
     default_config.search.break_bonds = [(1, 2)]
     _, node = setup_mcts_broken_bonds(config=default_config)

@@ -305,12 +305,24 @@ class AiZynthFinder:
 
         scorers = [self.scorers[name] for name in scorer_names]
 
-        if self.config.post_processing.scorer_weights:
+        scorer_weights = self.config.post_processing.scorer_weights
+        if scorer_weights:
+            if len(scorer_weights) != len(scorer_names):
+                raise ValueError(
+                    "The number of post-processing scorer weights must match the number "
+                    "of route scorers. "
+                    f"-> len(weights)={len(scorer_weights)} and len(scorers)={len(scorer_names)}."
+                )
+            if any(weight <= 0 for weight in scorer_weights):
+                raise ValueError(
+                    "Post-processing scorer weights must be positive. "
+                    f"-> weights={scorer_weights}."
+                )
             scorers = [
                 CombinedScorer(
                     self.config,
                     scorer_names,
-                    self.config.post_processing.scorer_weights,
+                    scorer_weights,
                 )
             ]
 

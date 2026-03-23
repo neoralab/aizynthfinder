@@ -71,7 +71,12 @@ class CombinedScorer(Scorer):
     ) -> None:
         super().__init__(config)
         self._scorers = [config.scorers[scorer] for scorer in scorers]
-        self._weights = weights if weights else [1 / len(scorers)] * len(scorers)
+        if weights is not None and len(weights) != len(scorers):
+            raise ValueError(
+                "The number of scorer weights must match the number of scorers. "
+                f"-> len(weights)={len(weights)} and len(scorers)={len(scorers)}."
+            )
+        self._weights = list(weights) if weights is not None else [1 / len(scorers)] * len(scorers)
 
         if combine_strategy not in ["mean-arithmetic", "mean-geometric", "product"]:
             raise ValueError(
@@ -96,11 +101,11 @@ class CombinedScorer(Scorer):
             ) / sum(self._weights)
 
         product_score = 1.0
-        for score in scores:
-            product_score *= score
+        for score, weight in zip(scores, self._weights):
+            product_score *= score**weight
 
         if self._combine_strategy == "mean-geometric":
-            return product_score ** (1 / len(scores))
+            return product_score ** (1 / sum(self._weights))
         return product_score
 
     def _score_node(self, node: MctsNode) -> float:

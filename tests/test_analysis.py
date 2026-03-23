@@ -62,6 +62,17 @@ def test_sort_nodes_scorer(setup_analysis):
     assert best_scores[0]["number of reactions"] == 2
 
 
+def test_sort_nodes_state_scorer_with_scaler_includes_internal_nodes(
+    setup_analysis, default_config
+):
+    scorer = StateScorer(default_config, scaler_params={"name": "squash"})
+    analysis, _ = setup_analysis(scorer=scorer)
+
+    best_nodes, _ = analysis.sort()
+
+    assert len(best_nodes) == 5
+
+
 def test_sort_routes(setup_analysis_andor_tree):
     analysis = setup_analysis_andor_tree(scorer=NumberOfReactionsScorer())
 
