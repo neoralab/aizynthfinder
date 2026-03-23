@@ -33,6 +33,7 @@ Open `examples/run_from_smiles.py` and update the `SETTINGS` values near the top
 - `stock_name`
 - `expansion_policy_name`
 - `filter_policy_name`
+- `max_transforms` to set the retrosynthesis tree depth
 - optional output flags such as `show_progress`
 
 No command-line arguments are required.
@@ -71,6 +72,7 @@ Open `examples/run_planning_mode.py` and update the `SETTINGS` values near the t
 - `policy_name`
 - `filter_policy_names`
 - `stock_names`
+- `retrosynthesis_depth` to set the per-request retrosynthesis depth
 - optional output flags such as `show_progress`
 
 No command-line arguments are required.

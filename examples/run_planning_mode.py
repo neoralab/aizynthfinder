@@ -21,6 +21,7 @@ POLICY = "uspto"
 FILTER_POLICIES = ["uspto"]
 STOCKS = ["zinc"]
 SHOW_PROGRESS = False
+RETROSYNTHESIS_DEPTH: int | None = 8
 PRINT_FULL_FIRST_ROUTE = False
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class ExampleSettings:
     filter_policy_names: list[str]
     stock_names: list[str]
     show_progress: bool
+    retrosynthesis_depth: int | None
     print_full_first_route: bool
 
 SETTINGS = ExampleSettings(
@@ -42,6 +44,7 @@ SETTINGS = ExampleSettings(
     filter_policy_names=FILTER_POLICIES,
     stock_names=STOCKS,
     show_progress=SHOW_PROGRESS,
+    retrosynthesis_depth=RETROSYNTHESIS_DEPTH,
     print_full_first_route=PRINT_FULL_FIRST_ROUTE,
 )
 
@@ -55,6 +58,7 @@ def build_request(settings: ExampleSettings) -> PlanningRequest:
         filter=settings.filter_policy_names,
         stocks=settings.stock_names,
         show_progress=settings.show_progress,
+        depth=settings.retrosynthesis_depth,
     )
 
 

@@ -66,6 +66,7 @@ The command creates a `config.yml` file next to the downloaded assets, so you ca
 from aizynthfinder.aizynthfinder import AiZynthFinder
 
 finder = AiZynthFinder(configfile="./public-data/config.yml")
+finder.config.search.max_transforms = 8
 finder.target_smiles = "CC(=O)Oc1ccccc1C(=O)O"
 finder.prepare_tree()
 finder.tree_search(show_progress=True)
@@ -87,6 +88,7 @@ result = plan_reaction_routes(
     PlanningRequest(
         smiles="CC(=O)Oc1ccccc1C(=O)O",
         config_file="./public-data/config.yml",
+        depth=8,
         show_progress=False,
     )
 )
