@@ -15,13 +15,13 @@ from aizynthfinder.schemas import PlanningRequest, PlanningResult
 from aizynthfinder.services import plan_reaction_routes
 
 # Edit these values directly in the script. No CLI arguments are required.
-TARGET_SMILES = "CC(=O)Oc1ccccc1C(=O)O"
+TARGET_SMILES = "CC(=O)O[C@@H]1C2=C(C)[C@H](C[C@@](O)([C@@H](OC(=O)C3=CC=CC=C3)C3[C@@]4(CO[C@@H]4C[C@H](O)[C@@]3(C)C1=O)OC(C)=O)C2(C)C)OC(=O)[C@H](O)[C@@H](NC(=O)C3=CC=CC=C3)C3=CC=CC=C3"
 CONFIG_FILE = DEFAULT_CONFIG_FILE
 POLICY = "uspto"
 FILTER_POLICIES = ["uspto"]
 STOCKS = ["zinc"]
 SHOW_PROGRESS = False
-RETROSYNTHESIS_DEPTH: int | None = 8
+RETROSYNTHESIS_DEPTH: int | None = 1
 PRINT_FULL_FIRST_ROUTE = False
 
 @dataclass(frozen=True)
