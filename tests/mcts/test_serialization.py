@@ -39,6 +39,24 @@ def test_serialize_deserialize_state(default_config):
     assert scorer(node1) == scorer(node0)
 
 
+def test_state_hash_is_stable_for_identical_states(default_config):
+    mol1 = TreeMolecule(parent=None, smiles="CCC", transform=1)
+    mol2 = TreeMolecule(parent=None, smiles="CCC", transform=1)
+
+    state1 = MctsState([mol1], default_config)
+    state2 = MctsState([mol2], default_config)
+
+    assert hash(state1) == hash(state2)
+    assert state1.expandables_hash == state2.expandables_hash
+
+
+def test_state_hash_differs_for_different_states(default_config):
+    state1 = MctsState([TreeMolecule(parent=None, smiles="CCC", transform=1)], default_config)
+    state2 = MctsState([TreeMolecule(parent=None, smiles="CCO", transform=1)], default_config)
+
+    assert hash(state1) != hash(state2)
+
+
 def test_serialize_node(setup_mcts_search):
     serializer = MoleculeSerializer()
     root, _, _ = setup_mcts_search

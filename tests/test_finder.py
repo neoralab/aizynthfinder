@@ -904,6 +904,44 @@ def test_build_routes_combined_scorer(setup_aizynthfinder, shared_datadir):
     assert round(score, 4) == 0.747
 
 
+def test_build_routes_rejects_mismatched_postprocessing_weights(setup_aizynthfinder):
+    root_smi = "CCCCOc1ccc(CC(=O)N(C)O)cc1"
+    child_smi = ["CCCCOc1ccc(CC(=O)Cl)cc1", "CNO"]
+    lookup = {root_smi: {"smiles": ".".join(child_smi), "prior": 1.0}}
+    config_dict = {
+        "post_processing": {
+            "route_scorers": ["state score", "number of reactions"],
+            "scorer_weights": [1.0],
+        }
+    }
+    finder = setup_aizynthfinder(lookup, child_smi, config_dict)
+
+    finder.tree_search()
+
+    with pytest.raises(
+        ValueError, match="post-processing scorer weights must match"
+    ):
+        finder.build_routes()
+
+
+def test_build_routes_rejects_non_positive_postprocessing_weights(setup_aizynthfinder):
+    root_smi = "CCCCOc1ccc(CC(=O)N(C)O)cc1"
+    child_smi = ["CCCCOc1ccc(CC(=O)Cl)cc1", "CNO"]
+    lookup = {root_smi: {"smiles": ".".join(child_smi), "prior": 1.0}}
+    config_dict = {
+        "post_processing": {
+            "route_scorers": ["state score"],
+            "scorer_weights": [0.0],
+        }
+    }
+    finder = setup_aizynthfinder(lookup, child_smi, config_dict)
+
+    finder.tree_search()
+
+    with pytest.raises(ValueError, match="weights must be positive"):
+        finder.build_routes()
+
+
 def test_one_expansion_multistep(setup_aizynthfinder):
     """
     Test the building of this tree:

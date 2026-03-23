@@ -159,10 +159,13 @@ class TreeAnalysis:
 
     def _all_nodes(self) -> Sequence[MctsNode]:
         assert isinstance(self.search_tree, MctsSearchTree)
-        # This is to keep backwards compatibility, this should be investigate further
-        if repr(self.scorers[0]) == "state score":
+        if self._includes_internal_nodes(self.scorers[0]):
             return list(self.search_tree.graph())
         return [node for node in self.search_tree.graph() if not node.children]
+
+    @staticmethod
+    def _includes_internal_nodes(scorer: Scorer) -> bool:
+        return isinstance(scorer, StateScorer)
 
     def _pareto_rank_sort(
         self,

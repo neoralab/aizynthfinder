@@ -1,11 +1,33 @@
 import pytest
 
-from aizynthfinder.chem import TreeMolecule
+from aizynthfinder.chem import SmilesBasedRetroReaction, TreeMolecule
 from aizynthfinder.context.policy import (
+    ExpansionStrategy,
     MultiExpansionStrategy,
     TemplateBasedExpansionStrategy,
 )
 from aizynthfinder.utils.exceptions import PolicyException
+
+
+class _StaticExpansionStrategy(ExpansionStrategy):
+    def __init__(self, key, config, reaction_smiles_priors):
+        super().__init__(key, config)
+        self._reaction_smiles_priors = reaction_smiles_priors
+
+    def get_actions(self, molecules, cache_molecules=None):
+        mol = molecules[0]
+        actions = []
+        priors = []
+        for index, (reactants, prior) in enumerate(self._reaction_smiles_priors):
+            actions.append(
+                SmilesBasedRetroReaction(
+                    mol,
+                    reactants_str=reactants,
+                    metadata={"policy_name": self.key, "rank": index},
+                )
+            )
+            priors.append(prior)
+        return actions, priors
 
 
 def test_multi_expansion_strategy_incorrect_keys(
@@ -66,6 +88,29 @@ def test_multi_expansion_strategy_wo_additive_expansion(
     _, priors = multi_expansion_strategy.get_actions(mols)
 
     assert priors == [0.7, 0.2]
+
+
+def test_multi_expansion_strategy_non_additive_uses_weighted_first_policy(
+    default_config, setup_template_expansion_policy
+):
+    expansion_policy = default_config.expansion_policy
+    strategy1, _ = setup_template_expansion_policy("policy1")
+    expansion_policy.load(strategy1)
+    strategy2, _ = setup_template_expansion_policy("policy2")
+    expansion_policy.load(strategy2)
+
+    multi_expansion_strategy = MultiExpansionStrategy(
+        "multi_expansion_strategy",
+        default_config,
+        expansion_strategies=["policy1", "policy2"],
+        expansion_strategy_weights=[0.25, 0.75],
+    )
+
+    mols = [TreeMolecule(smiles="CCO", parent=None)]
+    _, priors = multi_expansion_strategy.get_actions(mols)
+
+    priors = [round(p, 4) for p in priors]
+    assert priors == [0.1944, 0.0556]
 
 
 def test_weighted_multi_expansion_strategy(
@@ -186,6 +231,38 @@ def test_multi_expansion_strategy_cutoff(
     actions, priors = multi_expansion_strategy.get_actions(mols)
     assert len(actions) == 2
     assert len(priors) == 2
+
+
+def test_multi_expansion_strategy_deduplicates_actions_before_pruning(default_config):
+    mol = TreeMolecule(smiles="CCO", parent=None)
+    policy1 = _StaticExpansionStrategy(
+        "policy1",
+        default_config,
+        [("CC.C", 0.9), ("CO.C", 0.4)],
+    )
+    policy2 = _StaticExpansionStrategy(
+        "policy2",
+        default_config,
+        [("CC.C", 0.6), ("CN.O", 0.5)],
+    )
+    default_config.expansion_policy.load(policy1)
+    default_config.expansion_policy.load(policy2)
+
+    multi_expansion_strategy = MultiExpansionStrategy(
+        "multi_expansion_strategy",
+        default_config,
+        expansion_strategies=["policy1", "policy2"],
+        expansion_strategy_weights=[0.4, 0.6],
+        additive_expansion=True,
+        cutoff_number=2,
+    )
+
+    actions, priors = multi_expansion_strategy.get_actions([mol])
+
+    assert len(actions) == 2
+    assert [round(prior, 4) for prior in priors] == [0.36, 0.3]
+    assert actions[0].metadata["policy_names"] == ["policy1", "policy2"]
+    assert actions[0].metadata["prior_merged_from"] == [0.36, 0.18]
 
 
 def test_create_templated_expansion_strategy_wo_kwargs():

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import abc
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -160,16 +161,19 @@ class MultiExpansionStrategy(ExpansionStrategy):
             possible_actions, priors = expansion_strategy.get_actions(
                 molecules, cache_molecules
             )
-
-            all_possible_actions.extend(possible_actions)
-            if not self.additive_expansion and all_possible_actions:
-                all_priors.extend(priors)
-                break
+            if not possible_actions:
+                continue
 
             weighted_prior = [expansion_strategy_weight * p for p in priors]
-
+            all_possible_actions.extend(possible_actions)
             all_priors.extend(weighted_prior)
 
+            if not self.additive_expansion:
+                break
+
+        all_possible_actions, all_priors = self._deduplicate_actions(
+            all_possible_actions, all_priors
+        )
         all_possible_actions, all_priors = self._prune_actions(
             all_possible_actions, all_priors
         )
@@ -200,6 +204,63 @@ class MultiExpansionStrategy(ExpansionStrategy):
                     f"Enforcing {expansion_strategy.key}.rescale_prior=True"
                 )
         return self._expansion_strategies
+
+
+    def _deduplicate_actions(
+        self, actions: List[RetroReaction], priors: List[float]
+    ) -> Tuple[List[RetroReaction], List[float]]:
+        unique_actions: "OrderedDict[str, Tuple[RetroReaction, float]]" = OrderedDict()
+        for action, prior in zip(actions, priors):
+            key = action.reaction_smiles()
+            if key not in unique_actions:
+                action.metadata["policy_names"] = self._collect_policy_names(action)
+                action.metadata["prior_merged_from"] = [prior]
+                unique_actions[key] = (action, prior)
+                continue
+
+            existing_action, existing_prior = unique_actions[key]
+            combined_policy_names = sorted(
+                set(self._collect_policy_names(existing_action))
+                | set(self._collect_policy_names(action))
+            )
+            merged_prior_sources = sorted(
+                [
+                    *existing_action.metadata.get(
+                        "prior_merged_from", [existing_prior]
+                    ),
+                    prior,
+                ],
+                reverse=True,
+            )
+
+            kept_action, kept_prior = existing_action, existing_prior
+            if prior > existing_prior:
+                action.metadata = {
+                    **existing_action.metadata,
+                    **action.metadata,
+                }
+                kept_action, kept_prior = action, prior
+
+            kept_action.metadata["policy_names"] = combined_policy_names
+            kept_action.metadata["prior_merged_from"] = merged_prior_sources
+            unique_actions[key] = (kept_action, kept_prior)
+
+        dedup_actions = [item[0] for item in unique_actions.values()]
+        dedup_priors = [item[1] for item in unique_actions.values()]
+        return dedup_actions, dedup_priors
+
+    @staticmethod
+    def _collect_policy_names(action: RetroReaction) -> List[str]:
+        return sorted(
+            {
+                name
+                for name in [
+                    *(action.metadata.get("policy_names", [])),
+                    action.metadata.get("policy_name"),
+                ]
+                if name
+            }
+        )
 
     def _prune_actions(
         self, actions: List[RetroReaction], priors: List[float]

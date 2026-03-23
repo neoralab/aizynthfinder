@@ -2,7 +2,7 @@
 """
 from __future__ import annotations
 
-import os
+import hashlib
 from typing import TYPE_CHECKING
 
 from rdkit.Chem import Draw
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from aizynthfinder.context.config import Configuration
     from aizynthfinder.utils.type_utils import Any, List, Optional, Sequence, StrDict
 
-os.environ["PYTHONHASHSEED"] = "42"
 
 
 class MctsState:
@@ -55,12 +54,17 @@ class MctsState:
         ) or self.is_solved
 
         self._inchi_key = tuple(sorted(mol.inchi_key for mol in self.mols))
-        self._hash = hash(self._inchi_key)
+        self._hash = self._stable_hash(self._inchi_key)
 
         expandable_inchis = tuple(
             sorted(mol.inchi_key for mol in self.expandable_mols)
         )
-        self.expandables_hash = hash(expandable_inchis)
+        self.expandables_hash = self._stable_hash(expandable_inchis)
+
+    @staticmethod
+    def _stable_hash(items: Sequence[str]) -> int:
+        digest = hashlib.sha256("||".join(items).encode("utf-8")).hexdigest()
+        return int(digest[:16], 16)
 
     def __hash__(self) -> int:
         return self._hash

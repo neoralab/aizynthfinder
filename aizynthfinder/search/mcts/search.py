@@ -170,10 +170,12 @@ class MctsSearchTree:
         self.profiling["iterations"] += 1
         leaf = self.select_leaf()
         leaf.expand()
+        self._graph = None
         while not leaf.is_terminal():
             child = leaf.promising_child()
             if child:
                 child.expand()
+                self._graph = None
                 leaf = child
 
         self.backpropagate(leaf)
