@@ -45,3 +45,23 @@ def test_plan_reaction_routes_returns_full_payload(mocker):
     assert result.solved is True
     assert result.routes == [{"route_metadata": {"score": 0.9}}]
     assert result.stock_info == {"O": ["stock"]}
+
+
+def test_plan_reaction_routes_requires_loaded_expansion_policy(mocker):
+    finder = mocker.Mock()
+    finder.expansion_policy.items = []
+    finder.filter_policy.items = []
+
+    mocker.patch("aizynthfinder.services.planning.AiZynthFinder", return_value=finder)
+
+    try:
+        plan_reaction_routes(
+            PlanningRequest(
+                smiles="CCO",
+                config_file="config.yml",
+            )
+        )
+    except ValueError as err:
+        assert "No expansion policies are loaded" in str(err)
+    else:
+        raise AssertionError("Expected planning to fail without expansion policies")

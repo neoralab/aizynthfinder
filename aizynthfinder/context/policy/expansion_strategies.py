@@ -230,13 +230,21 @@ class MultiExpansionStrategy(ExpansionStrategy):
         :raises: ValueError if weights from the config file do not sum to one.
         :return: a list of expansion strategy weights
         """
-        if not "expansion_strategy_weights" in kwargs:
+        if "expansion_strategy_weights" not in kwargs:
             return [1.0 for _ in self.expansion_strategy_keys]
 
         expansion_strategy_weights = kwargs["expansion_strategy_weights"]
+        if len(expansion_strategy_weights) != len(self.expansion_strategy_keys):
+            raise ValueError(
+                "The number of expansion strategy weights in MultiExpansion must "
+                "match the number of expansion strategies. -> "
+                f"len(weights)={len(expansion_strategy_weights)} and "
+                f"len(strategies)={len(self.expansion_strategy_keys)}."
+            )
+
         sum_weights = sum(expansion_strategy_weights)
 
-        if sum_weights != 1:
+        if not np.isclose(sum_weights, 1.0):
             raise ValueError(
                 "The expansion strategy weights in MultiExpansion should "
                 "sum to one. -> "

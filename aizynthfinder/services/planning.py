@@ -19,7 +19,11 @@ def _configure_finder_from_request(request: PlanningRequest) -> AiZynthFinder:
     if request.policy:
         finder.expansion_policy.select(request.policy)
     else:
-        finder.expansion_policy.select(finder.expansion_policy.items[0])
+        if not finder.expansion_policy.items:
+            raise ValueError(
+                "No expansion policies are loaded; provide a config with at least one policy"
+            )
+        finder.expansion_policy.select_first()
     if request.filter:
         finder.filter_policy.select(request.filter)
     else:

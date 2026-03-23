@@ -3,6 +3,17 @@ from aizynthfinder.chem.serialization import MoleculeDeserializer, MoleculeSeria
 from aizynthfinder.search.mcts import MctsNode, MctsSearchTree, MctsState
 
 
+def test_state_equality_does_not_rely_on_hash_collisions(default_config, mocker):
+    mol1 = TreeMolecule(parent=None, smiles="CCC", transform=1)
+    mol2 = TreeMolecule(parent=None, smiles="CCO", transform=1)
+    state1 = MctsState([mol1], default_config)
+    state2 = MctsState([mol2], default_config)
+
+    mocker.patch.object(MctsState, "__hash__", return_value=123)
+
+    assert state1 != state2
+
+
 def test_serialize_deserialize_state(default_config):
     mol = TreeMolecule(parent=None, smiles="CCC", transform=1)
     state0 = MctsState([mol], default_config)
