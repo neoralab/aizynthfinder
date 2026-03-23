@@ -9,7 +9,6 @@ import pytest
 import yaml
 
 from aizynthfinder.analysis import RouteCollection
-from aizynthfinder.chem import MoleculeException
 from aizynthfinder.interfaces import AiZynthApp
 from aizynthfinder.interfaces.aizynthapp import main as app_main
 from aizynthfinder.interfaces.aizynthcli import main as cli_main
@@ -441,3 +440,30 @@ def test_download_public_data(tmpdir, mocker, add_cli_arguments):
     assert len(policies["uspto"]) == 2
     stocks = config.get("stock", {})
     assert "zinc" in stocks
+
+
+def test_load_postprocessing_jobs_logs_missing_module(mocker):
+    logger_factory = mocker.patch("aizynthfinder.interfaces.aizynthcli.logger")
+
+    from aizynthfinder.interfaces.aizynthcli import _load_postprocessing_jobs
+
+    jobs = _load_postprocessing_jobs(["missing_post_module"])
+
+    assert jobs == []
+    logger_factory.return_value.warning.assert_called_once()
+
+
+def test_prepare_and_build_routes_respects_show_progress(mocker):
+    finder = mocker.Mock()
+    finder.tree_search.return_value = 2.5
+
+    from aizynthfinder.interfaces.aizynthcli import _prepare_and_build_routes
+
+    search_time = _prepare_and_build_routes(finder, "CCO", show_progress=False)
+
+    assert search_time == 2.5
+    assert finder.target_smiles == "CCO"
+    finder.prepare_tree.assert_called_once_with()
+    finder.tree_search.assert_called_once_with(show_progress=False)
+    finder.build_routes.assert_called_once_with()
+    finder.routes.compute_scores.assert_called_once_with(*finder.scorers.objects())
