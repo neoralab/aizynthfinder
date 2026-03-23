@@ -1,22 +1,23 @@
 # AiZynthFinder
 
-[![License](https://img.shields.io/github/license/MolecularAI/aizynthfinder)](https://github.com/MolecularAI/aizynthfinder/blob/master/LICENSE)
-[![Tests](https://github.com/MolecularAI/aizynthfinder/workflows/tests/badge.svg)](https://github.com/MolecularAI/aizynthfinder/actions?workflow=tests)
-[![codecov](https://codecov.io/gh/MolecularAI/aizynthfinder/branch/master/graph/badge.svg)](https://codecov.io/gh/MolecularAI/aizynthfinder)
+[![PyPI version](https://img.shields.io/pypi/v/aizynthfinder.svg)](https://pypi.org/project/aizynthfinder/)
+[![Python versions](https://img.shields.io/pypi/pyversions/aizynthfinder.svg)](https://pypi.org/project/aizynthfinder/)
+[![License](https://img.shields.io/github/license/MolecularAI/aizynthfinder.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-molecularai.github.io-blue)](https://molecularai.github.io/aizynthfinder/)
 
-AiZynthFinder is a CPU-friendly retrosynthesis planning toolkit for Linux-first scientific workflows. It combines neural-network-guided policy models with route-search algorithms such as Monte Carlo tree search to propose synthetic routes from a target molecule to purchasable precursors.
+AiZynthFinder is a retrosynthesis planning toolkit for Linux-first scientific workflows. It combines neural-network-guided policy models with route-search algorithms such as Monte Carlo tree search to propose synthetic routes from a target molecule to purchasable precursors.
 
-## What it provides
+## Why AiZynthFinder
 
-- Route planning from SMILES with configurable search strategies.
-- Python APIs for direct search control and service-layer integration.
-- Pluggable stocks, scorers, policies, and search implementations.
-- Production-friendly packaging with a `uv` workflow and optional extras.
-- Docker/Linux suitability without requiring GPU dependencies.
+- Plan retrosynthetic routes from a target SMILES string.
+- Use the Python API for direct search control and route inspection.
+- Integrate validated request/response models through the service layer.
+- Swap in custom stocks, scorers, policies, and search implementations.
+- Keep the default installation CPU-friendly, with optional extras for heavier integrations.
 
-## Quickstart
+## Installation
 
-### Install with `uv`
+### Install from PyPI with `uv`
 
 ```bash
 uv venv
@@ -24,7 +25,7 @@ source .venv/bin/activate
 uv pip install aizynthfinder
 ```
 
-Optional extras stay behind extras so the default install remains lean:
+Optional extras are available when you need additional integrations:
 
 ```bash
 uv pip install "aizynthfinder[tf]"
@@ -32,17 +33,34 @@ uv pip install "aizynthfinder[mongo,bloom]"
 uv pip install "aizynthfinder[all]"
 ```
 
-### Download public assets
+### Install from source for development
 
-AiZynthFinder needs model and stock assets separately from the base package. You can download the public example assets and a starter config with:
+```bash
+uv sync --group dev
+```
+
+If you prefer an editable install:
+
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+uv pip install -e ".[dev]"
+```
+
+## Download public assets
+
+AiZynthFinder ships as code only. Models, template libraries, stock data, and the starter configuration are downloaded separately:
 
 ```bash
 download_public_data ./public-data
 ```
 
-That command creates a usable `config.yml` alongside the downloaded assets.
+The command creates a `config.yml` file next to the downloaded assets, so you can use `./public-data/config.yml` directly in the examples below.
 
-## Python API
+## Quickstart
+
+### Python API
 
 ```python
 from aizynthfinder.aizynthfinder import AiZynthFinder
@@ -57,9 +75,9 @@ print(finder.extract_statistics())
 print(finder.routes.dict_with_extra(include_scores=True))
 ```
 
-### Service-layer API for tool integration
+### Service-layer API
 
-If you want another tool or agent to submit a SMILES string and receive the full retrosynthesis payload in one call, use the planning service layer:
+Use the planning service layer when another tool, workflow engine, or agent needs a single validated request/response boundary:
 
 ```python
 from aizynthfinder.schemas import PlanningRequest
@@ -76,29 +94,25 @@ result = plan_reaction_routes(
 print(result.solved)
 print(result.statistics)
 print(result.stock_info)
-print(result.routes)  # full serialized retrosynthesis trees
+print(result.routes)
 ```
 
 A reusable agent prompt is included at [`docs/prompts/full_retrosynthesis_tool_prompt.md`](docs/prompts/full_retrosynthesis_tool_prompt.md).
 
+## Documentation map
+
+- [Getting started and configuration guide](docs/index.rst)
+- [Python interface](docs/python_interface.rst)
+- [Configuration reference](docs/configuration.rst)
+- [Stocks and policy setup](docs/stocks.rst)
+- [Scoring and route analysis](docs/scoring.rst)
+- [Examples](examples/README.md)
+
+Hosted documentation is available at <https://molecularai.github.io/aizynthfinder/>.
+
 ## Development workflow
 
-### Sync a development environment
-
-```bash
-uv sync --group dev
-```
-
-### Editable install
-
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e .
-uv pip install -e ".[dev]"
-```
-
-### Tests and checks
+### Common checks
 
 ```bash
 uv run pytest -v
@@ -129,11 +143,9 @@ print(result.model_dump_json(indent=2))
 PY
 ```
 
-Use bind mounts for model/stock assets rather than baking large data files into the image unless you control that deployment pipeline.
+Use bind mounts for model and stock assets instead of baking large data files into the image unless you control that deployment pipeline.
 
-## Architecture at a glance
-
-The package is organized around a small set of responsibilities:
+## Project structure
 
 - `aizynthfinder.config`: configuration entry points and compatibility exports.
 - `aizynthfinder.schemas`: Pydantic models for validated external contracts.
@@ -142,14 +154,7 @@ The package is organized around a small set of responsibilities:
 - `aizynthfinder.adapters`: external integration boundary modules.
 - `aizynthfinder.search`, `aizynthfinder.chem`, and related packages: core chemistry and search logic.
 
-Pydantic is used at boundaries such as config validation and service payloads. Dataclasses remain the preferred choice for internal runtime/domain objects where coercion is unnecessary and lightweight state matters more than validation.
-
-## Production and deployment notes
-
-- Default installation is CPU-only.
-- Linux is the primary deployment target, especially for Docker and batch execution.
-- Large models, template libraries, and stock data should be managed as external assets.
-- Async wrappers are available for I/O-oriented orchestration, but the core planning algorithm remains synchronous and CPU-bound by design.
+Pydantic is used at input and output boundaries, while dataclasses remain the preferred choice for lightweight internal runtime objects.
 
 ## Contributing
 
@@ -157,5 +162,3 @@ Pydantic is used at boundaries such as config validation and service payloads. D
 2. Make focused changes with tests.
 3. Run `uv run pytest -v` and any targeted checks.
 4. Submit a pull request with a concise description of behavior, compatibility, and asset assumptions.
-
-For more detailed usage and background, see the hosted documentation: https://molecularai.github.io/aizynthfinder/.
