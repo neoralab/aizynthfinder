@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from aizynthfinder.context.policy import ExpansionPolicy, FilterPolicy
-from aizynthfinder.schemas import PostProcessingSchema, SearchSettingsSchema
-from aizynthfinder.services.configuration import load_configuration_dict, validate_runtime_config
 from aizynthfinder.context.scoring import ScorerCollection
 from aizynthfinder.context.stock import Stock
+from aizynthfinder.schemas.config import PostProcessingSchema, SearchSettingsSchema
+from aizynthfinder.services.configuration import load_configuration_dict, validate_runtime_config
 from aizynthfinder.utils.logging import logger
 
 if TYPE_CHECKING:

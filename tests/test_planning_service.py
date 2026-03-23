@@ -29,10 +29,12 @@ def test_plan_reaction_routes_returns_full_payload(mocker):
             filter=["filter1"],
             stocks=["stock1"],
             scorer="state score",
+            depth=8,
         )
     )
 
     finder_cls.assert_called_once_with(configfile="config.yml", configdict=None)
+    assert finder.config.search.max_transforms == 8
     finder.stock.select.assert_called_once_with(["stock1"])
     finder.expansion_policy.select.assert_called_once_with(["policy1"])
     finder.filter_policy.select.assert_called_once_with(["filter1"])

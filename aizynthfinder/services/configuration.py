@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from aizynthfinder.schemas import PlanningRuntimeSchema
+from aizynthfinder.schemas.config import PlanningRuntimeSchema
 
 _ENV_PATTERN = re.compile(r"\$\{.+?\}")
 _FORBIDDEN_ATTRIBUTE_GROUPS = {"search", "post_processing"}

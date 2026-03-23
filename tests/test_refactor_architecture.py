@@ -64,7 +64,8 @@ def test_tree_search_async_wraps_sync_method(mocker):
 
 
 def test_planning_request_schema_accepts_boundary_payload():
-    request = PlanningRequest(smiles="CCO", config={"search": {"time_limit": 10}})
+    request = PlanningRequest(smiles="CCO", config={"search": {"time_limit": 10}}, depth=9)
 
     assert request.smiles == "CCO"
     assert request.config == {"search": {"time_limit": 10}}
+    assert request.depth == 9

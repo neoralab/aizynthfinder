@@ -6,12 +6,14 @@ import asyncio
 
 from aizynthfinder.aizynthfinder import AiZynthFinder
 from aizynthfinder.domain import PlannerRunArtifacts
-from aizynthfinder.schemas import PlanningRequest, PlanningResult
+from aizynthfinder.schemas.planning import PlanningRequest, PlanningResult
 
 
 def _configure_finder_from_request(request: PlanningRequest) -> AiZynthFinder:
     """Create and configure a finder from a validated planning request."""
     finder = AiZynthFinder(configfile=request.config_file, configdict=request.config)
+    if request.depth is not None:
+        finder.config.search.max_transforms = request.depth
     if request.stocks:
         finder.stock.select(request.stocks)
     if request.policy:

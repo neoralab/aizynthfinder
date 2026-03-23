@@ -20,6 +20,7 @@ STOCK_NAME = "zinc"
 EXPANSION_POLICY_NAME = "uspto"
 FILTER_POLICY_NAME: str | None = "uspto"
 SHOW_PROGRESS = True
+MAX_TRANSFORMS = 8
 PRINT_FULL_FIRST_ROUTE = True
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class ExampleSettings:
     expansion_policy_name: str
     filter_policy_name: str | None
     show_progress: bool
+    max_transforms: int
     print_full_first_route: bool
 
 SETTINGS = ExampleSettings(
@@ -41,6 +43,7 @@ SETTINGS = ExampleSettings(
     expansion_policy_name=EXPANSION_POLICY_NAME,
     filter_policy_name=FILTER_POLICY_NAME,
     show_progress=SHOW_PROGRESS,
+    max_transforms=MAX_TRANSFORMS,
     print_full_first_route=PRINT_FULL_FIRST_ROUTE,
 )
 
@@ -59,6 +62,7 @@ def select_item(collection: Any, selection_name: str, collection_label: str) -> 
 def configure_finder(settings: ExampleSettings) -> AiZynthFinder:
     """Create a finder configured with the example stock and policy selections."""
     finder = AiZynthFinder(configfile=str(settings.config_file))
+    finder.config.search.max_transforms = settings.max_transforms
     select_item(finder.stock, settings.stock_name, "stock")
     select_item(
         finder.expansion_policy,
@@ -96,6 +100,7 @@ def print_search_summary(
     """Print the high-level search summary."""
     print(f"Target SMILES: {settings.target_smiles}")
     print(f"Configuration: {settings.config_file}")
+    print(f"Max depth: {settings.max_transforms}")
     print(f"Search time: {search_time:.2f} s")
     print(f"Solved: {statistics.get('is_solved', False)}")
     print(f"Routes found: {route_count}")

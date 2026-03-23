@@ -16,6 +16,7 @@ Use ``AiZynthFinder`` directly when you want to control stock selection, policy 
     from aizynthfinder.aizynthfinder import AiZynthFinder
 
     finder = AiZynthFinder(configfile="config.yml")
+    finder.config.search.max_transforms = 8
 
     finder.stock.select("zinc")
     finder.expansion_policy.select("uspto")
@@ -47,6 +48,7 @@ Use the planning service layer when another program needs a single validated req
         PlanningRequest(
             smiles="Cc1cccc(c1N(CC(=O)Nc2ccc(cc2)c3ncon3)C(=O)C4CCS(=O)(=O)CC4)C",
             config_file="config.yml",
+            depth=8,
             show_progress=False,
         )
     )
@@ -56,7 +58,7 @@ Use the planning service layer when another program needs a single validated req
     print(result.stock_info)
     print(result.routes)
 
-This service API wraps the synchronous planning workflow and returns a validated ``PlanningResult`` payload that is convenient for tool integration.
+This service API wraps the synchronous planning workflow and returns a validated ``PlanningResult`` payload that is convenient for tool integration. Set ``depth`` when you want to override ``search.max_transforms`` for a single request without editing the configuration file.
 
 Further reading
 ---------------
