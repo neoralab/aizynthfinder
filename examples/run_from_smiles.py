@@ -1,31 +1,54 @@
 from __future__ import annotations
 
-import json
-import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from _example_helpers import (
+    DEFAULT_CONFIG_FILE,
+    format_first_route,
+    print_section,
+    validate_config_file,
+)
 
 from aizynthfinder.aizynthfinder import AiZynthFinder
 
-
 # Edit these values directly in the script. No CLI arguments are required.
 TARGET_SMILES = "CC(=O)Oc1ccccc1C(=O)O"
-CONFIG_FILE = REPO_ROOT / "public-data" / "config.yml"
+CONFIG_FILE = DEFAULT_CONFIG_FILE
 STOCK_NAME = "zinc"
 EXPANSION_POLICY_NAME = "uspto"
 FILTER_POLICY_NAME: str | None = "uspto"
 SHOW_PROGRESS = True
 PRINT_FULL_FIRST_ROUTE = True
 
+@dataclass(frozen=True)
+class ExampleSettings:
+    """Editable settings for this example script."""
 
-def _select_or_raise(collection: Any, selection_name: str, collection_label: str) -> None:
-    available = collection.items
-    if selection_name not in available:
-        available_text = ", ".join(available) if available else "<none loaded>"
+    target_smiles: str
+    config_file: Path
+    stock_name: str
+    expansion_policy_name: str
+    filter_policy_name: str | None
+    show_progress: bool
+    print_full_first_route: bool
+
+SETTINGS = ExampleSettings(
+    target_smiles=TARGET_SMILES,
+    config_file=CONFIG_FILE,
+    stock_name=STOCK_NAME,
+    expansion_policy_name=EXPANSION_POLICY_NAME,
+    filter_policy_name=FILTER_POLICY_NAME,
+    show_progress=SHOW_PROGRESS,
+    print_full_first_route=PRINT_FULL_FIRST_ROUTE,
+)
+
+def select_item(collection: Any, selection_name: str, collection_label: str) -> None:
+    """Select a configured stock or policy and fail with a clear message if missing."""
+    available_items = list(collection.items)
+    if selection_name not in available_items:
+        available_text = ", ".join(available_items) if available_items else "<none loaded>"
         raise ValueError(
             f"Configured {collection_label} '{selection_name}' was not found. "
             f"Available values: {available_text}"
@@ -33,77 +56,87 @@ def _select_or_raise(collection: Any, selection_name: str, collection_label: str
     collection.select(selection_name)
 
 
-def _build_missing_config_message() -> str:
-    config_dir = CONFIG_FILE.parent
-    return (
-        f"Configuration file not found: {CONFIG_FILE}\n\n"
-        "Download the public demo assets first, for example from the repository root:\n"
-        f"  mkdir -p {config_dir} && python -m aizynthfinder.tools.download_public_data {config_dir}\n"
-        "or, if you installed the project entry points:\n"
-        f"  mkdir -p {config_dir} && download_public_data {config_dir}\n\n"
-        "Then rerun this script."
-    )
-
-
-def main() -> int:
-    if not CONFIG_FILE.exists():
-        print(_build_missing_config_message(), file=sys.stderr)
-        return 1
-
-    finder = AiZynthFinder(configfile=str(CONFIG_FILE))
-
-    _select_or_raise(finder.stock, STOCK_NAME, "stock")
-    _select_or_raise(
+def configure_finder(settings: ExampleSettings) -> AiZynthFinder:
+    """Create a finder configured with the example stock and policy selections."""
+    finder = AiZynthFinder(configfile=str(settings.config_file))
+    select_item(finder.stock, settings.stock_name, "stock")
+    select_item(
         finder.expansion_policy,
-        EXPANSION_POLICY_NAME,
+        settings.expansion_policy_name,
         "expansion policy",
     )
 
-    if FILTER_POLICY_NAME:
-        _select_or_raise(finder.filter_policy, FILTER_POLICY_NAME, "filter policy")
+    if settings.filter_policy_name:
+        select_item(finder.filter_policy, settings.filter_policy_name, "filter policy")
     elif finder.filter_policy.items:
         finder.filter_policy.select_all()
 
-    finder.target_smiles = TARGET_SMILES
+    return finder
+
+
+def run_search(settings: ExampleSettings) -> tuple[AiZynthFinder, float, dict[str, object], list[dict[str, Any]]]:
+    """Run a retrosynthesis search and return the objects used for presentation."""
+    finder = configure_finder(settings)
+    finder.target_smiles = settings.target_smiles
     finder.prepare_tree()
-    search_time = finder.tree_search(show_progress=SHOW_PROGRESS)
+    search_time = finder.tree_search(show_progress=settings.show_progress)
     finder.build_routes()
 
     statistics = finder.extract_statistics()
     routes = finder.routes.dict_with_extra(include_scores=True, include_metadata=True)
+    return finder, search_time, statistics, routes
 
-    print(f"Target SMILES: {TARGET_SMILES}")
-    print(f"Configuration: {CONFIG_FILE}")
+
+def print_search_summary(
+    settings: ExampleSettings,
+    search_time: float,
+    statistics: dict[str, object],
+    route_count: int,
+) -> None:
+    """Print the high-level search summary."""
+    print(f"Target SMILES: {settings.target_smiles}")
+    print(f"Configuration: {settings.config_file}")
     print(f"Search time: {search_time:.2f} s")
     print(f"Solved: {statistics.get('is_solved', False)}")
-    print(f"Routes found: {len(routes)}")
+    print(f"Routes found: {route_count}")
+
+
+def print_search_output(
+    settings: ExampleSettings,
+    finder: AiZynthFinder,
+    statistics: dict[str, object],
+    routes: list[dict[str, Any]],
+) -> None:
+    """Print the search statistics, first route, and stock information."""
     print()
-    print("Search statistics:")
-    print(json.dumps(statistics, indent=2, sort_keys=True))
+    print_section("Search statistics:", statistics)
 
-    if routes:
-        print()
-        print("First route:")
-        first_route = routes[0] if PRINT_FULL_FIRST_ROUTE else {
-            "children": routes[0].get("children", []),
-            "scores": routes[0].get("scores", {}),
-            "smiles": routes[0].get("smiles"),
-        }
-        print(json.dumps(first_route, indent=2, sort_keys=True))
-
-        stock_info = finder.stock_info()
-        if stock_info:
-            print()
-            print("Stock availability for route leaves:")
-            print(json.dumps(stock_info, indent=2, sort_keys=True))
-    else:
+    first_route = format_first_route(
+        routes,
+        include_full_route=settings.print_full_first_route,
+    )
+    if first_route is None:
         print()
         print("No complete route was built for the configured target and search settings.")
+        return
 
+    print()
+    print_section("First route:", first_route)
+
+    stock_info = finder.stock_info()
+    if stock_info:
+        print()
+        print_section("Stock availability for route leaves:", stock_info)
+
+
+def main() -> int:
+    if not validate_config_file(SETTINGS.config_file):
+        return 1
+
+    finder, search_time, statistics, routes = run_search(SETTINGS)
+    print_search_summary(SETTINGS, search_time, statistics, len(routes))
+    print_search_output(SETTINGS, finder, statistics, routes)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

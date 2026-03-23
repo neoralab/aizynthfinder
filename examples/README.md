@@ -1,24 +1,12 @@
 # Examples
 
-## `run_from_smiles.py`
+These examples are intentionally small and are meant to be edited in place.
+Change the settings near the top of each script, then run the script from the repository root.
 
-Minimal Python example that runs AiZynthFinder from a SMILES string defined directly in the script.
+## Shared setup
 
-### What to edit
-
-Open `examples/run_from_smiles.py` and change the constants at the top of the file:
-
-- `TARGET_SMILES`
-- `CONFIG_FILE`
-- `STOCK_NAME`
-- `EXPANSION_POLICY_NAME`
-- `FILTER_POLICY_NAME`
-
-No command-line arguments are needed.
-
-### Prepare public demo assets
-
-From the repository root:
+Both examples expect the public demo assets to be available at `./public-data/config.yml`.
+From the repository root, download them with:
 
 ```bash
 mkdir -p ./public-data
@@ -32,7 +20,22 @@ mkdir -p ./public-data
 download_public_data ./public-data
 ```
 
-That command downloads the public models/stock files and writes `./public-data/config.yml`.
+## `run_from_smiles.py`
+
+Minimal Python example that uses `AiZynthFinder` directly to plan routes for a SMILES string.
+
+### What to edit
+
+Open `examples/run_from_smiles.py` and update the `SETTINGS` values near the top of the file:
+
+- `target_smiles`
+- `config_file`
+- `stock_name`
+- `expansion_policy_name`
+- `filter_policy_name`
+- optional output flags such as `show_progress`
+
+No command-line arguments are required.
 
 ### Run the example
 
@@ -50,44 +53,27 @@ uv run python examples/run_from_smiles.py
 
 ### What the script prints
 
-- basic search statistics
-- number of routes found
+- a short search summary
+- formatted search statistics
 - the first extracted route as formatted JSON
 - stock availability for the route leaves
 
 ## `run_planning_mode.py`
 
-Minimal Python example that uses the service-layer Planning mode API with a validated `PlanningRequest`.
+Minimal Python example that uses the service-layer planning API with a validated `PlanningRequest`.
 
 ### What to edit
 
-Open `examples/run_planning_mode.py` and change the constants at the top of the file:
+Open `examples/run_planning_mode.py` and update the `SETTINGS` values near the top of the file:
 
-- `TARGET_SMILES`
-- `CONFIG_FILE`
-- `POLICY`
-- `FILTER_POLICIES`
-- `STOCKS`
+- `target_smiles`
+- `config_file`
+- `policy_name`
+- `filter_policy_names`
+- `stock_names`
+- optional output flags such as `show_progress`
 
-No command-line arguments are needed.
-
-### Prepare public demo assets
-
-From the repository root:
-
-```bash
-mkdir -p ./public-data
-python -m aizynthfinder.tools.download_public_data ./public-data
-```
-
-If you installed the project entry points, this works too:
-
-```bash
-mkdir -p ./public-data
-download_public_data ./public-data
-```
-
-That command downloads the public models/stock files and writes `./public-data/config.yml`.
+No command-line arguments are required.
 
 ### Run the example
 
@@ -106,6 +92,5 @@ uv run python examples/run_planning_mode.py
 ### What the script prints
 
 - the validated planning request payload
-- summary planning statistics
-- number of routes found
+- a compact planning result summary
 - the first serialized route (truncated by default)
