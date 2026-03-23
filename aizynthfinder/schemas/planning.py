@@ -19,6 +19,7 @@ class PlanningRequest(BaseModel):
     filter: list[str] = Field(default_factory=list)
     stocks: list[str] = Field(default_factory=list)
     scorer: str | list[str] | None = None
+    depth: int | None = Field(default=None, ge=1)
     show_progress: bool = False
 
     @model_validator(mode="after")
