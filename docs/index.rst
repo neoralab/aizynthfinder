@@ -1,23 +1,31 @@
 aizynthfinder documentation
 ===========================
 
-aizynthfinder is a tool for retrosynthetic planning. The default algorithm is based on a Monte Carlo tree search that recursively breaks down a molecule to purchasable precursors. The tree search is guided by a policy that suggests possible precursors by utilizing a neural network trained on a library of known reaction templates.
+aizynthfinder is a toolkit for retrosynthetic planning. The default algorithm uses Monte Carlo tree search to recursively decompose a molecule into purchasable precursors, guided by a policy model trained on known reaction templates.
 
-Introduction
-------------
+Getting started
+---------------
 
-To run retrosynthesis experiments you need a trained model and a stock collection. You can download a publicly available model based on USPTO and a stock collection from the ZINC database.
+To run retrosynthesis experiments you need both:
 
-.. code-block::
+- a trained model or policy bundle, and
+- a stock collection of purchasable precursors.
+
+You can download the public starter assets and a matching ``config.yml`` with:
+
+.. code-block:: bash
 
     download_public_data .
 
-This downloads the data to your current directory. The resulting ``config.yml`` file can be used directly with the Python and service-layer APIs.
+This command downloads the public data into the current directory and writes a ``config.yml`` file that can be used directly with the Python API and the service-layer API.
 
-The package is documented around two supported integration surfaces:
+Supported interfaces
+--------------------
 
-* the Python API for direct control of ``AiZynthFinder``, and
-* the service-layer API for validated tool integration and structured payloads.
+The package is documented around two primary integration surfaces:
+
+* the Python API for direct control of ``AiZynthFinder``
+* the service-layer API for validated tool integration and structured payloads
 
 The Python API is useful when you want fine-grained control over policy selection, search execution, scoring, and route extraction.
 
@@ -50,15 +58,25 @@ The service layer is useful for external tools and agents that need a validated 
 
     print(result.model_dump_json(indent=2))
 
+Documentation guide
+-------------------
+
+Use the sections below based on the task you are working on:
+
+* ``python_interface`` for programming examples and API usage
+* ``configuration`` for configuration files and runtime options
+* ``stocks`` for stock sources and inventory setup
+* ``scoring`` for route evaluation and ranking
+* ``howto`` for common workflows
+* ``sequences`` and ``relationships`` for route analysis outputs
 
 .. toctree::
     :hidden:
-    
+
     python_interface
     configuration
     stocks
     scoring
     howto
-    aizynthfinder
     sequences
     relationships
