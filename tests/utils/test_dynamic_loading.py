@@ -47,3 +47,8 @@ def test_incorrect_class():
         load_dynamic_class(
             f"aizynthfinder.reactiontree.{bad_class}", exception_cls=MyException
         )
+
+
+def test_default_module_error_uses_custom_exception_type():
+    with pytest.raises(MyException, match="default_module"):
+        load_dynamic_class("ReactionTree", exception_cls=MyException)
