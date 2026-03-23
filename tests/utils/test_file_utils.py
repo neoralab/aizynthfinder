@@ -1,9 +1,10 @@
 import os
+import subprocess
 import gzip
 import json
 
-import pytest
 import pandas as pd
+import pytest
 
 from aizynthfinder.utils.files import (
     cat_datafiles,
@@ -16,17 +17,17 @@ from aizynthfinder.utils.files import (
 
 @pytest.fixture
 def create_dummy_file(tmpdir, mocker):
-    patched_tempfile = mocker.patch("aizynthfinder.utils.files.tempfile.mktemp")
     split_files = [
-        tmpdir / "split1",
-        tmpdir / "split2",
-        tmpdir / "split3",
+        str(tmpdir / "split1"),
+        str(tmpdir / "split2"),
+        str(tmpdir / "split3"),
     ]
-    patched_tempfile.side_effect = split_files
+    patched_creator = mocker.patch("aizynthfinder.utils.files._create_temp_filename")
+    patched_creator.side_effect = split_files
     filename = tmpdir / "input"
 
     def wrapper(content):
-        with open(filename, "w") as fileobj:
+        with open(filename, "w", encoding="utf-8") as fileobj:
             fileobj.write(content)
         return filename, split_files
 
@@ -144,3 +145,36 @@ def test_save_load_datafile_roundtrip(filename, tmpdir):
     assert data1.columns.to_list() == data2.columns.to_list()
     assert data1.a.to_list() == data2.a.to_list()
     assert data1.b.to_list() == data2.b.to_list()
+
+
+def test_split_file_invalid_nparts(tmpdir):
+    filename = tmpdir / "input"
+    filename.write("a\nb", mode="w")
+
+    with pytest.raises(ValueError, match="positive"):
+        split_file(str(filename), 0)
+
+
+def test_start_processes_raises_on_failure(tmpdir):
+    script_filename = str(tmpdir / "failing.py")
+    with open(script_filename, "w", encoding="utf-8") as fileobj:
+        fileobj.write("import sys\nprint('boom')\nsys.exit(3)\n")
+
+    def create_cmd(index, filename):
+        return ["python", script_filename, f"{filename}-{index}"]
+
+    with pytest.raises(subprocess.CalledProcessError, match="exit code 3"):
+        start_processes(["dummy"], str(tmpdir / "log"), create_cmd, 1)
+
+
+def test_start_processes_invalid_poll_freq(tmpdir):
+    def create_cmd(index, filename):
+        return ["python", "-c", "print('ok')"]
+
+    with pytest.raises(ValueError, match="poll_freq"):
+        start_processes(["dummy"], str(tmpdir / "log"), create_cmd, 0)
+
+
+def test_cat_datafiles_requires_inputs(tmpdir):
+    with pytest.raises(ValueError, match="at least one input file"):
+        cat_datafiles([], str(tmpdir / "out.json"))

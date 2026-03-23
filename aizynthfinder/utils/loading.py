@@ -1,49 +1,49 @@
-""" Module containing routine to dynamically load a class from a specification """
+"""Utilities for loading classes or functions from string specifications."""
+
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from typing import Any, Optional
+
+def _resolve_module_and_name(name_spec: str, default_module: str | None) -> tuple[str, str]:
+    if "." in name_spec:
+        return name_spec.rsplit(".", maxsplit=1)
+    if default_module:
+        return default_module, name_spec
+    raise ValueError("Must provide default_module argument if not given in name_spec")
 
 
 def load_dynamic_class(
     name_spec: str,
-    default_module: Optional[str] = None,
-    exception_cls: Any = ValueError,
+    default_module: str | None = None,
+    exception_cls: type[Exception] = ValueError,
 ) -> Any:
-    """
-    Load an object from a dynamic specification.
+    """Load an object from a dynamic specification.
 
-    The specification can be either:
-        ClassName, in-case the module name is taken from the `default_module` argument
-    or
-        package_name.module_name.ClassName, in-case the module is taken as `package_name.module_name`
+    The specification can be either a bare object name, in which case
+    ``default_module`` must be supplied, or a fully-qualified
+    ``package.module.ObjectName`` reference.
 
-    :param name_spec: the class specification
-    :param default_module: the default module
-    :param exception_cls: the exception class to raise on exception
-    :return: the loaded class
+    Args:
+        name_spec: The object specification to resolve.
+        default_module: Fallback module to use for bare object names.
+        exception_cls: Exception type raised when resolution fails.
+
+    Returns:
+        The imported object.
     """
-    if "." not in name_spec:
-        name = name_spec
-        if not default_module:
-            raise exception_cls(
-                "Must provide default_module argument if not given in name_spec"
-            )
-        module_name = default_module
-    else:
-        module_name, name = name_spec.rsplit(".", maxsplit=1)
+    try:
+        module_name, name = _resolve_module_and_name(name_spec, default_module)
+    except ValueError as err:
+        raise exception_cls(str(err)) from err
 
     try:
         loaded_module = importlib.import_module(module_name)
-    except ImportError:
-        raise exception_cls(f"Unable to load module: {module_name}")
+    except ImportError as err:
+        raise exception_cls(f"Unable to load module: {module_name}") from err
 
-    if not hasattr(loaded_module, name):
-        raise exception_cls(
-            f"Module ({module_name}) does not have a class called {name}"
-        )
-
-    return getattr(loaded_module, name)
+    try:
+        return getattr(loaded_module, name)
+    except AttributeError as err:
+        raise exception_cls(f"Module ({module_name}) does not have a class called {name}") from err
