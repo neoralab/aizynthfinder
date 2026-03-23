@@ -10,9 +10,10 @@ import subprocess
 import tempfile
 import time
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import ExitStack
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import pandas as pd
 from deprecated import deprecated
@@ -21,10 +22,46 @@ from aizynthfinder.domain import SmilesBatch
 from aizynthfinder.utils.logging import logger
 
 _HDF_FILE_SUFFIXES = (".hdf5", ".hdf")
+CommandFactory: TypeAlias = Callable[[int, Any], Sequence[str]]
 
 
 def _is_hdf5_file(filename: str | Path) -> bool:
     return str(filename).endswith(_HDF_FILE_SUFFIXES)
+
+
+def _ensure_tree_column(data: pd.DataFrame, filename: str | Path) -> None:
+    if "trees" not in data.columns:
+        raise ValueError(
+            f"Cannot extract trees from {filename!s}: missing required 'trees' column"
+        )
+
+
+def _collect_tree_payloads(
+    dataframes: Sequence[tuple[str | Path, pd.DataFrame]], trees_name: str | None
+) -> tuple[list[Any] | None, list[pd.DataFrame]]:
+    if not trees_name:
+        return None, [dataframe for _, dataframe in dataframes]
+
+    first_filename, first_dataframe = dataframes[0]
+    if "trees" not in first_dataframe.columns:
+        return None, [dataframe for _, dataframe in dataframes]
+
+    tree_payloads: list[Any] = []
+    dataframes_without_trees: list[pd.DataFrame] = []
+    for filename, dataframe in dataframes:
+        _ensure_tree_column(dataframe, filename)
+        tree_payloads.extend(dataframe["trees"].tolist())
+        dataframes_without_trees.append(dataframe.drop(columns="trees"))
+    return tree_payloads, dataframes_without_trees
+
+
+def _normalize_trees_filename(filename: str) -> str:
+    return filename if filename.endswith(".gz") else f"{filename}.gz"
+
+
+def _write_tree_payloads(tree_payloads: Sequence[Any], trees_name: str) -> None:
+    with gzip.open(_normalize_trees_filename(trees_name), "wt", encoding="utf-8") as fileobj:
+        json.dump(list(tree_payloads), fileobj)
 
 
 def read_datafile(filename: str | Path) -> pd.DataFrame:
@@ -97,27 +134,13 @@ def cat_datafiles(input_files: list[str], output_name: str, trees_name: str | No
     if not input_files:
         raise ValueError("Expected at least one input file")
 
-    data = read_datafile(input_files[0])
-    tree_payloads: list[Any] | None = None
-    columns_without_trees: list[str] | None = None
-    if trees_name and "trees" in data.columns:
-        columns_without_trees = [column for column in data.columns if column != "trees"]
-        tree_payloads = list(data["trees"].values)
-        data = data[columns_without_trees]
+    dataframes = [(filename, read_datafile(filename)) for filename in input_files]
+    tree_payloads, tabular_data = _collect_tree_payloads(dataframes, trees_name)
+    concatenated_data = pd.concat(tabular_data, ignore_index=True)
 
-    for filename in input_files[1:]:
-        new_data = read_datafile(filename)
-        if tree_payloads is not None and columns_without_trees is not None:
-            tree_payloads.extend(new_data["trees"].values)
-            new_data = new_data[columns_without_trees]
-        data = pd.concat([data, new_data])
-
-    save_datafile(data.reset_index(drop=True), output_name)
+    save_datafile(concatenated_data, output_name)
     if tree_payloads is not None and trees_name:
-        if not trees_name.endswith(".gz"):
-            trees_name += ".gz"
-        with gzip.open(trees_name, "wt", encoding="utf-8") as fileobj:
-            json.dump(tree_payloads, fileobj)
+        _write_tree_payloads(tree_payloads, trees_name)
 
 
 def _create_temp_filename() -> str:
@@ -125,6 +148,15 @@ def _create_temp_filename() -> str:
     os.close(file_descriptor)
     Path(filename).unlink(missing_ok=True)
     return filename
+
+
+def _line_batches(lines: Sequence[str], nparts: int) -> Iterator[list[str]]:
+    batch_size, remainder = divmod(len(lines), nparts)
+    start = 0
+    for part_index in range(nparts):
+        stop = start + batch_size + (1 if part_index < remainder else 0)
+        yield list(lines[start:stop])
+        start = stop
 
 
 def split_file(filename: str | Path, nparts: int) -> list[str]:
@@ -143,13 +175,9 @@ def split_file(filename: str | Path, nparts: int) -> list[str]:
     lines = Path(filename).read_text(encoding="utf-8").splitlines()
 
     filenames: list[str] = []
-    batch_size, remainder = divmod(len(lines), nparts)
-    stop = 0
-    for part in range(1, nparts + 1):
-        start = stop
-        stop += batch_size + 1 if part <= remainder else batch_size
+    for line_batch in _line_batches(lines, nparts):
         temp_filename = _create_temp_filename()
-        Path(temp_filename).write_text("\n".join(lines[start:stop]), encoding="utf-8")
+        Path(temp_filename).write_text("\n".join(line_batch), encoding="utf-8")
         filenames.append(temp_filename)
     return filenames
 
@@ -180,7 +208,11 @@ async def load_smiles_batch_async(filename: str | Path) -> SmilesBatch:
     return await asyncio.to_thread(load_smiles_batch, filename)
 
 
-def _wait_for_processes(processes: Sequence[subprocess.Popen[Any]], output_fileobjs: Sequence[Any], poll_freq: int) -> None:
+def _wait_for_processes(
+    processes: Sequence[subprocess.Popen[Any]],
+    output_fileobjs: Sequence[Any],
+    poll_freq: int,
+) -> None:
     logger().info("Waiting for background tasks to complete...")
     while True:
         time.sleep(poll_freq)
@@ -216,7 +248,7 @@ def _raise_for_failed_processes(processes: Sequence[subprocess.Popen[Any]], log_
 def start_processes(
     inputs: Sequence[Any],
     log_prefix: str,
-    cmd_callback: Callable[[int, Any], Sequence[str]],
+    cmd_callback: CommandFactory,
     poll_freq: int = 5,
 ) -> None:
     """Start background subprocesses and wait for completion.
@@ -231,10 +263,12 @@ def start_processes(
         raise ValueError("poll_freq must be a positive integer")
 
     processes: list[subprocess.Popen[Any]] = []
-    output_fileobjs: list[Any] = []
-    try:
+    with ExitStack() as stack:
+        output_fileobjs: list[Any] = []
         for index, input_item in enumerate(inputs, 1):
-            logfile = open(f"{log_prefix}{index}.log", "w", encoding="utf-8")
+            logfile = stack.enter_context(
+                open(f"{log_prefix}{index}.log", "w", encoding="utf-8")
+            )
             output_fileobjs.append(logfile)
             cmd = list(cmd_callback(index, input_item))
             process = subprocess.Popen(cmd, stdout=logfile, stderr=subprocess.STDOUT)
@@ -242,8 +276,5 @@ def start_processes(
             logger().info("Started background task with pid=%s", process.pid)
 
         _wait_for_processes(processes, output_fileobjs, poll_freq)
-    finally:
-        for fileobj in output_fileobjs:
-            fileobj.close()
 
     _raise_for_failed_processes(processes, log_prefix)

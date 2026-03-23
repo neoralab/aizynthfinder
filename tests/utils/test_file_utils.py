@@ -128,6 +128,18 @@ def test_cat_hdf_trees(tmpdir):
     assert "trees" not in pd.read_hdf(hdf_filename, "table")
 
 
+def test_cat_datafiles_raises_if_tree_column_missing(tmpdir):
+    output_filename = str(tmpdir / "output.hdf")
+    tree_filename = str(tmpdir / "trees.json")
+    filename1 = str(tmpdir / "file1.hdf5")
+    filename2 = str(tmpdir / "file2.hdf5")
+    pd.DataFrame({"mol": ["A"], "trees": [[1]]}).to_hdf(filename1, "table")
+    pd.DataFrame({"mol": ["B"]}).to_hdf(filename2, "table")
+
+    with pytest.raises(ValueError, match="missing required 'trees' column"):
+        cat_datafiles([filename1, filename2], output_filename, tree_filename)
+
+
 @pytest.mark.parametrize(
     ("filename"),
     [
